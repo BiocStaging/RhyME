@@ -296,6 +296,11 @@ test_RhyME_internal_summaries <- function() {
     checkEquals(names(params), c("amplitude_link", "amplitude_response",
                                  "phase", "mesor_link", "mesor_response"))
     checkEquals(params$amplitude_link, 0.5, tolerance = 1e-10)
+    checkEquals(
+        params$amplitude_response,
+        (plogis(0.5) - plogis(-0.5)) / 2,
+        tolerance = 1e-12
+    )
 
     # With eta(t) = sin(2*pi*t/24), the fitted peak is at 6 h.
     sine_peak <- RhyME:::.computeCircadianParams(
@@ -303,12 +308,12 @@ test_RhyME_internal_summaries <- function() {
     )
     checkEquals(sine_peak$phase, 6, tolerance = 1e-10)
 
-    # The numerical period average must not count both 0 h and 24 h.
+    # The numerical period average uses 48 unique phase nodes.
     grid_params <- RhyME:::.computeCircadianParams(
         b0 = -0.4, b_sin = 0.7, b_cos = 0.2,
-        period = 24, grid_by = 1
+        period = 24
     )
-    tgrid <- 0:23
+    tgrid <- 24 * (0:47) / 48
     expected_mesor <- mean(plogis(
         -0.4 + 0.7 * sin(2 * pi * tgrid / 24) +
             0.2 * cos(2 * pi * tgrid / 24)
@@ -316,10 +321,13 @@ test_RhyME_internal_summaries <- function() {
     checkEquals(grid_params$mesor_response, expected_mesor,
                 tolerance = 1e-12)
 
+    conditional <- RhyME:::.computeCircadianParams(
+        b0 = -1, b_sin = 0.5, b_cos = 0.3, period = 24
+    )
     marginal <- RhyME:::.computeCircadianParams(
         b0 = -1, b_sin = 0.5, b_cos = 0.3, period = 24, tau = 1
     )
-    checkTrue(!isTRUE(all.equal(params$mesor_response,
+    checkTrue(!isTRUE(all.equal(conditional$mesor_response,
                                 marginal$mesor_response)))
 
     set.seed(42)
@@ -376,8 +384,11 @@ test_RhyME_plot_uses_fitted_design <- function() {
     tau <- res[cpg, "tau", drop = TRUE]
     eta <- b0 + b_sin * sin(2 * pi * tgrid / 24) +
         b_cos * cos(2 * pi * tgrid / 24)
-    z <- qnorm((seq_len(200L) - 0.5) / 200L)
-    expected <- colMeans(plogis(outer(tau * z, eta, "+")))
+    gh <- RhyME:::.normalGH(15L)
+    expected <- drop(crossprod(
+        gh$weights,
+        plogis(outer(tau * gh$nodes, eta, "+"))
+    ))
     checkEquals(built$data[[2]]$y, expected, tolerance = 1e-12)
 }
 

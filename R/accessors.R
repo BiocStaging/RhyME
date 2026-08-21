@@ -6,18 +6,13 @@
 #' @param period Numeric, the period in hours.
 #' @param tau Numeric vector of random-intercept SD estimates. Used to
 #'   recover marginal response-scale curves in mixed mode.
-#' @param grid_by Numeric, step size for the numerical time grid.
-#' @param mc_n Integer, number of fixed normal quantile nodes used to average
-#'   over the random intercept distribution.
 #' @return A list with amplitude_link, amplitude_response, phase,
 #'   mesor_link, mesor_response.
 #' @noRd
 .computeCircadianParams <- function(b0, b_sin, b_cos, period = 24,
-                                    tau = NULL, grid_by = 0.1,
-                                    mc_n = 200) {
+                                    tau = NULL) {
     n <- length(b0)
     if (is.null(tau)) tau <- rep(NA_real_, n)
-    mc_n <- as.integer(mc_n)
 
     # Amplitude on link scale
     amplitude_link <- sqrt(b_sin^2 + b_cos^2)
@@ -26,30 +21,49 @@
     phase_rad <- atan2(b_sin, b_cos)
     phase <- (phase_rad / (2 * pi) * period) %% period
 
-    # MESOR and amplitude on response scale via numerical grid. In mixed mode,
-    # average over U ~ N(0, tau^2) using deterministic normal quantile nodes.
-    tgrid <- seq(0, period, by = grid_by)
-    tgrid <- tgrid[tgrid < period]
-    omega <- 2 * pi / period
-    S <- sin(omega * tgrid)
-    C <- cos(omega * tgrid)
-    z <- stats::qnorm((seq_len(mc_n) - 0.5) / mc_n)
-
     amplitude_response <- rep(NA_real_, n)
     mesor_response <- rep(NA_real_, n)
 
-    for (i in seq_len(n)) {
-        if (is.na(b0[i]) || is.na(b_sin[i]) || is.na(b_cos[i])) next
-        eta <- b0[i] + b_sin[i] * S + b_cos[i] * C
-        if (is.finite(tau[i]) && tau[i] > 0) {
-            mu <- colMeans(.invlogit(outer(tau[i] * z, eta, "+")))
-        } else {
-            mu <- .invlogit(eta)
+    valid <- is.finite(b0) & is.finite(b_sin) & is.finite(b_cos)
+    valid_idx <- which(valid)
+    if (length(valid_idx)) {
+        tau_use <- ifelse(is.finite(tau) & tau > 0, tau, 0)
+        gh <- .normalGH(15L)
+
+        # The marginal inverse-logit is monotone, so the response-scale extrema
+        # occur exactly at b0 +/- amplitude_link; no time grid is needed here.
+        mu_high <- numeric(length(valid_idx))
+        mu_low <- numeric(length(valid_idx))
+        for (k in seq_along(gh$nodes)) {
+            shift <- tau_use[valid_idx] * gh$nodes[k]
+            mu_high <- mu_high + gh$weights[k] * stats::plogis(
+                b0[valid_idx] + amplitude_link[valid_idx] + shift
+            )
+            mu_low <- mu_low + gh$weights[k] * stats::plogis(
+                b0[valid_idx] - amplitude_link[valid_idx] + shift
+            )
         }
-        mu_bar <- mean(mu)
-        a_mu <- (max(mu) - min(mu)) / 2
-        amplitude_response[i] <- a_mu
-        mesor_response[i] <- mu_bar
+        amplitude_response[valid_idx] <- (mu_high - mu_low) / 2
+
+        # Average the marginal curve over one period using 48 equally spaced
+        # phase nodes and block vectorization across CpGs.
+        theta <- 2 * pi * (0:47) / 48
+        sin_t <- sin(theta)
+        cos_t <- cos(theta)
+        starts <- seq.int(1L, length(valid_idx), by = 1000L)
+        for (start in starts) {
+            idx <- valid_idx[
+                start:min(start + 999L, length(valid_idx))
+            ]
+            eta <- outer(b0[idx], rep(1, 48L)) +
+                outer(b_sin[idx], sin_t) + outer(b_cos[idx], cos_t)
+            marginal_mu <- matrix(0, nrow = length(idx), ncol = 48L)
+            for (k in seq_along(gh$nodes)) {
+                marginal_mu <- marginal_mu + gh$weights[k] *
+                    stats::plogis(eta + tau_use[idx] * gh$nodes[k])
+            }
+            mesor_response[idx] <- rowMeans(marginal_mu)
+        }
     }
 
     list(
@@ -58,6 +72,22 @@
         phase               = phase,
         mesor_link          = b0,
         mesor_response      = mesor_response
+    )
+}
+
+#' Gauss-Hermite nodes and weights for expectations under N(0, 1)
+#' @noRd
+.normalGH <- function(n) {
+    J <- matrix(0, nrow = n, ncol = n)
+    idx <- seq_len(n - 1L)
+    off_diag <- sqrt(idx / 2)
+    J[cbind(idx, idx + 1L)] <- off_diag
+    J[cbind(idx + 1L, idx)] <- off_diag
+    eig <- eigen(J, symmetric = TRUE)
+    ord <- order(eig$values)
+    list(
+        nodes = sqrt(2) * eig$values[ord],
+        weights = eig$vectors[1L, ord]^2
     )
 }
 

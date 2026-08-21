@@ -60,7 +60,7 @@ plotCosinorFit <- function(se, cpgs = NULL,
     # Build fitted curves
     tgrid <- seq(0, period, length.out = n_grid)
     omega <- 2 * pi / period
-    z <- stats::qnorm((seq_len(200L) - 0.5) / 200L)
+    gh <- .normalGH(15L)
     fit_list <- lapply(cpgs, function(cg) {
         b0 <- res[cg, "b0", drop = TRUE]
         bs <- res[cg, "b_sin", drop = TRUE]
@@ -70,9 +70,12 @@ plotCosinorFit <- function(se, cpgs = NULL,
         tau <- res[cg, "tau", drop = TRUE]
         fitted <- if (identical(design$mode, "mixed") &&
                       is.finite(tau) && tau > 0) {
-            colMeans(.invlogit(outer(tau * z, eta, "+")))
+            drop(crossprod(
+                gh$weights,
+                stats::plogis(outer(tau * gh$nodes, eta, "+"))
+            ))
         } else {
-            .invlogit(eta)
+            stats::plogis(eta)
         }
         data.frame(
             cpg  = cg,
