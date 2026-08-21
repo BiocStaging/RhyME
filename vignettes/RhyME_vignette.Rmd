@@ -35,8 +35,11 @@ account for repeated measurements. To improve stability in genome-wide analyses,
 RhyME also incorporates empirical Bayesian shrinkage of the beta-regression
 precision parameter.
 
-The modeling framework uses beta regression, cosinor rhythmometry, and Template
-Model Builder's automatic differentiation and Laplace approximation.
+The modeling framework uses beta regression
+([Ferrari and Cribari-Neto, 2004](https://doi.org/10.1080/0266476042000214501)),
+cosinor rhythmometry, and Template Model Builder's automatic differentiation
+and Laplace approximation
+([Kristensen et al., 2016](https://doi.org/10.18637/jss.v070.i05)).
 
 This vignette demonstrates how to use RhyME for:
 
