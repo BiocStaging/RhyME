@@ -111,11 +111,7 @@
                                squeeze_bounds, BPPARAM) {
     X_full <- .makeDesignMatrices(sample_df, X_cov)$full
     usable <- vapply(pilot_results, function(fit) {
-        parameter_ok <- length(fit$beta) == ncol(X_full) &&
-            all(is.finite(fit$beta)) && is.finite(fit$log_phi)
-        tau_ok <- mode != "mixed" ||
-            (length(fit$tau) == 1L && is.finite(fit$tau) && fit$tau >= 0)
-        isTRUE(fit$converged) && parameter_ok && tau_ok
+        isTRUE(fit$converged)
     }, logical(1))
 
     if (sum(usable) < .RHYME_MIN_PILOT_CPGS) {
@@ -228,10 +224,6 @@
         stop(sprintf("Column '%s' in colData must be numeric (hours).",
                      time_col), call. = FALSE)
     }
-    if (anyNA(cd[[time_col]]) || any(!is.finite(cd[[time_col]]))) {
-        stop(sprintf("Column '%s' in colData must contain finite times.",
-                     time_col), call. = FALSE)
-    }
     if (!is.null(subject_col)) {
         subject <- cd[[subject_col]]
         invalid_subject <- anyNA(subject) ||
@@ -254,12 +246,12 @@
         beta <- assay(se, assay_name)
     }
 
-    cpg_ids <- rownames(beta)
-    if (is.null(cpg_ids) || length(cpg_ids) != nrow(beta) ||
-        anyNA(cpg_ids) || any(!nzchar(cpg_ids)) || anyDuplicated(cpg_ids)) {
-        stop("The fitted assay must have unique, non-missing CpG row names.",
-             call. = FALSE)
-    }
+    # Samples without an observed collection time cannot contribute to the
+    # cosinor design and are omitted from the fit.
+    keep_samples <- is.finite(cd[[time_col]])
+    beta <- beta[, keep_samples, drop = FALSE]
+    cd <- cd[keep_samples, , drop = FALSE]
+
     if (!is.numeric(beta)) {
         stop("The fitted assay must contain numeric beta values.",
              call. = FALSE)

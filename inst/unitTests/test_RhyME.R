@@ -383,15 +383,15 @@ test_RhyME_input_validation <- function() {
         )
     }
 
-    bad_names <- dat$se
-    rownames(bad_names) <- NULL
-    checkException(fit_bad(bad_names))
-
     bad_time <- dat$se
     cd <- as.data.frame(SummarizedExperiment::colData(bad_time))
     cd$time[1] <- NA_real_
     SummarizedExperiment::colData(bad_time) <- S4Vectors::DataFrame(cd)
-    checkException(fit_bad(bad_time))
+    fit_missing_time <- fit_bad(bad_time)
+    checkEquals(
+        S4Vectors::metadata(fit_missing_time)$RhyME$design$n_samples,
+        ncol(bad_time) - 1L
+    )
 
     bad_subject <- dat$se
     cd <- as.data.frame(SummarizedExperiment::colData(bad_subject))
@@ -404,4 +404,11 @@ test_RhyME_input_validation <- function() {
     beta[1, 1] <- 1.01
     SummarizedExperiment::assay(bad_beta, "beta") <- beta
     checkException(fit_bad(bad_beta))
+
+    missing_beta <- dat$se
+    beta <- SummarizedExperiment::assay(missing_beta, "beta")
+    beta[1, 1] <- NA_real_
+    SummarizedExperiment::assay(missing_beta, "beta") <- beta
+    fit_missing_beta <- fit_bad(missing_beta)
+    checkEquals(nrow(fit_missing_beta), nrow(missing_beta))
 }

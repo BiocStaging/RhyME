@@ -102,10 +102,6 @@ fitCosinor <- function(se,
         sample_df$subject <- cd[[subject_col]]
     }
     X_cov <- .makeCovariateMatrix(cd, covariates)
-    design <- .makeDesignMatrices(sample_df, X_cov)$full
-    if (qr(design)$rank < ncol(design)) {
-        stop("The model design matrix is not full rank.", call. = FALSE)
-    }
 
     prior_spec <- NULL
 

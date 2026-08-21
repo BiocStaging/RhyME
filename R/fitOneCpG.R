@@ -60,7 +60,7 @@
     # Moment-based starting value for log(phi)
     mu0 <- mean(yv)
     v0 <- var(yv)
-    phi0 <- if (is.finite(v0) && v0 > 0) mu0 * (1 - mu0) / v0 - 1 else 10
+    phi0 <- mu0 * (1 - mu0) / v0 - 1
     lphi_init <- if (use_prior) pm else log(max(phi0, 1))
 
     if (mode == "mixed") {

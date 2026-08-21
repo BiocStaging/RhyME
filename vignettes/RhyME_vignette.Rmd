@@ -1,9 +1,5 @@
 ---
 title: "Detecting Circadian Rhythmicity in DNA Methylation with RhyME"
-author: "Yixiang Hong"
-date: "Last modified: 21 August 2026"
-bibliography: references.bib
-link-citations: true
 output:
   BiocStyle::html_document:
     toc: true
@@ -39,15 +35,8 @@ account for repeated measurements. To improve stability in genome-wide analyses,
 RhyME also incorporates empirical Bayesian shrinkage of the beta-regression
 precision parameter.
 
-The modeling framework builds on beta regression [@ferrari2004], cosinor
-rhythmometry [@cornelissen2014], and Template Model Builder's automatic
-differentiation and Laplace approximation [@kristensen2016]. Related tools such
-as MetaCycle combine established periodicity-detection methods for general
-time-series data [@wu2016], whereas RhyME is designed specifically for bounded
-methylation beta values and repeated-measures designs.
-
-Package source and issue tracking are available at
-<https://github.com/njuelsdke/RhyME>.
+The modeling framework uses beta regression, cosinor rhythmometry, and Template
+Model Builder's automatic differentiation and Laplace approximation.
 
 This vignette demonstrates how to use RhyME for:
 
@@ -64,12 +53,6 @@ After RhyME becomes available through Bioconductor, install it with:
 if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 BiocManager::install("RhyME")
-```
-
-The development version is available from GitHub:
-
-```{r install-github, eval=FALSE}
-remotes::install_github("njuelsdke/RhyME")
 ```
 
 # Data Preparation
@@ -154,22 +137,9 @@ se_fixed <- fitCosinor(se,
 se_fixed
 ```
 
-Optional sample- or subject-level confounders are named with `covariates`:
-
-The bundled example data do not contain `sex` or `age`; the following code is
-illustrative and assumes that both variables are present in `colData(se)`.
-
-```{r covariates, eval=FALSE}
-se_adjusted <- fitCosinor(se,
-    time_col = "time",
-    subject_col = "subject",
-    covariates = c("sex", "age"),
-    prior = "none"
-)
-```
-
-Covariate coefficients and covariate-specific tests are not returned. The
-single `pvalue` column continues to represent the rhythmicity test.
+Optional sample- or subject-level confounders can be added with, for example,
+`covariates = c("sex", "age")`. They are included as adjustment terms, while
+the reported `pvalue` tests rhythmicity.
 
 # Longitudinal Analysis (Mixed-Effects)
 
@@ -214,8 +184,7 @@ Specifically:
   hypothesis-test p-values, adjusted p-values, and convergence
   indicators.
 - `metadata(se_demo)$RhyME` contains analysis-level information, including
-  the model design, prior and test settings, and fitting summary. When
-  `prior = "auto"`, it also contains the empirical-Bayes prior estimates.
+  the model design, prior and test settings, and fitting summary.
 
 All per-CpG model results are available from `rowData(se_demo)`:
 
@@ -233,8 +202,6 @@ The main circadian summaries are:
 - `mesor_link`: fitted MESOR on the logit-link scale.
 - `mesor_response`: rhythm-adjusted mean methylation level on the beta-value
   scale.
-- `tau`: estimated subject-specific random-intercept standard deviation in
-  mixed-effects mode; `NA` for fixed-effects fits.
 
 In mixed-effects mode, response-scale summaries are reported as
 population-average quantities. The fitted methylation curve is averaged
@@ -259,10 +226,6 @@ curves for the top-ranked CpG sites.
 ```{r plots, fig.width=8, fig.height=5}
 plotCosinorFit(se_demo)
 ```
-
-# References
-
-<div id="refs"></div>
 
 # Session Info
 
