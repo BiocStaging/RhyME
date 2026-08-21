@@ -78,8 +78,7 @@ se
 For CpG \(g\), subject \(i\), and observation \(j\), RhyME assumes
 
 \[
-Y_{gij} \sim \operatorname{Beta}
-\left(\mu_{gij}\phi_g,\{1-\mu_{gij}\}\phi_g\right),
+Y_{gij} \sim \operatorname{Beta}(\mu_{gij}, \phi_g),
 \]
 
 with
