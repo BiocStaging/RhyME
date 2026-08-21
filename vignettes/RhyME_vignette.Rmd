@@ -53,7 +53,8 @@ remotes::install_github("njuelsdke/RhyME")
 
 RhyME expects a `SummarizedExperiment` with: 1. An assay containing methylation beta values (CpGs x samples); 2.`colData` with at minimum a numeric time column (in hours) 3.Optionally, a subject identifier column for repeated measures.
 
-The package includes example data (3000 CpGs, 8 subjects, 6 timepoints):
+The package includes example data (3000 CpGs, 8 subjects, 6 timepoints). To
+keep this vignette quick to build, the evaluated example uses 50 CpGs:
 
 ```{r data-prep}
 library(RhyME)
@@ -62,7 +63,7 @@ library(SummarizedExperiment)
 # Load bundled example data
 example <- readRDS(system.file("extdata", "example_data.rds",
     package = "RhyME"))
-se <- example$se[1:1200, ]
+se <- example$se[seq_len(50), ]
 se
 ```
 
@@ -151,11 +152,15 @@ set.seed(1)
 se_demo <- fitCosinor(se,
     time_col = "time",
     subject_col = "subject",
-    prior = "auto",
+    prior = "none",
     verbose = FALSE
 )
 
 ```
+
+The evaluated example disables empirical-Bayes shrinkage to keep package builds
+fast. For a genome-wide analysis, enable automatic prior estimation and its
+bootstrap correction with `prior = "auto"`.
 
 # Parameter Estimates and Result Interpretation
 
@@ -169,8 +174,8 @@ Specifically:
   hypothesis-test p-values, adjusted p-values, and convergence
   indicators.
 - `metadata(se_demo)$RhyME` contains analysis-level information, including
-  the model design, empirical Bayes prior estimates, test settings, and fitting
-  summary.
+  the model design, prior and test settings, and fitting summary. When
+  `prior = "auto"`, it also contains the empirical-Bayes prior estimates.
 
 All per-CpG model results are available from `rowData(se_demo)`:
 
