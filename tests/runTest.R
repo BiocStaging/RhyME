@@ -1,2 +1,2 @@
 library(SummarizedExperiment)
-BiocGenerics:::testPackage("cirBEM")
+BiocGenerics:::testPackage("RhyME")

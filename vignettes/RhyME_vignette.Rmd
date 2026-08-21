@@ -1,0 +1,217 @@
+---
+title: "Detecting Circadian Rhythmicity in DNA Methylation with RhyME"
+date: ""
+output:
+  BiocStyle::html_document:
+    toc: true
+    toc_depth: 3
+vignette: >
+  %\VignetteIndexEntry{RhyME Introduction}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    collapse = FALSE,
+    comment = "#>",
+    message = FALSE,
+    warning = FALSE
+)
+```
+
+# Introduction
+
+RhyME is an R package for detecting circadian rhythmicity in DNA methylation
+data. DNA methylation beta values are bounded between 0 and 1 and often exhibit
+strong mean-variance dependence, making standard Gaussian cosinor models less
+well suited for modeling methylation dynamics. In addition, circadian
+methylation studies commonly involve repeated measurements from the same
+subjects.
+
+RhyME addresses these issues by fitting cosinor-based beta regression models
+for methylation beta values. The model represents rhythmic methylation patterns
+using sine and cosine terms, while optional subject-specific random intercepts
+account for repeated measurements. To improve stability in genome-wide analyses,
+RhyME also incorporates empirical Bayesian shrinkage of the beta-regression
+precision parameter.
+
+This vignette demonstrates how to use RhyME for:
+
+1. Fitting fixed- and mixed-effect beta-regression cosinor models to methylation
+   data.
+2. Detecting rhythmic CpG sites and ranking results.
+3. Visualizing fitted circadian methylation patterns.
+
+# Installation
+
+```{r install, eval=FALSE}
+remotes::install_github("njuelsdke/RhyME")
+```
+
+# Data Preparation
+
+RhyME expects a `SummarizedExperiment` with: 1. An assay containing methylation beta values (CpGs x samples); 2.`colData` with at minimum a numeric time column (in hours) 3.Optionally, a subject identifier column for repeated measures.
+
+The package includes example data (3000 CpGs, 8 subjects, 6 timepoints):
+
+```{r data-prep}
+library(RhyME)
+library(SummarizedExperiment)
+
+# Load bundled example data
+example <- readRDS(system.file("extdata", "example_data.rds",
+    package = "RhyME"))
+se <- example$se[1:1200, ]
+se
+```
+
+# Statistical Model
+
+For CpG \(g\), subject \(i\), and observation \(j\), RhyME assumes
+
+\[
+Y_{gij} \sim \operatorname{Beta}
+\left(\mu_{gij}\phi_g,\{1-\mu_{gij}\}\phi_g\right),
+\]
+
+with
+
+\[
+\operatorname{logit}(\mu_{gij}) =
+\beta_{0g}
++ \beta_{cg}\cos(2\pi t_{ij}/P)
++ \beta_{sg}\sin(2\pi t_{ij}/P)
++ \mathbf{x}_{ij}^{\mathsf T}\boldsymbol{\gamma}_g
++ b_{gi}.
+\]
+
+For longitudinal data, \(b_{gi}\) is a subject-specific random intercept.
+It is omitted when fitting the fixed-effects model. By default, the period
+\(P\) is 24 hours. Optional covariates \(\mathbf{x}_{ij}\), such as sex or
+age, are included in both the rhythmic and null models as adjustment terms.
+By default, rhythmicity is assessed using a joint Wald test of
+\(H_0:\beta_{cg}=\beta_{sg}=0\). A likelihood-ratio test can instead be
+requested using `test = "LRT"`. In either case, the test concerns only the
+sine and cosine coefficients rather than the adjustment covariates.
+
+# Empirical-Bayes Precision Shrinkage
+
+RhyME optionally stabilizes CpG-specific precision estimates by placing an
+empirical-Bayes prior on the log-precision parameter,
+
+\[
+\log(\phi_g) \sim \mathcal{N}(\mu_\phi, \sigma_\phi^2).
+\]
+
+With `prior = "auto"`, the prior parameters are estimated from a pilot subset
+of CpGs and corrected for finite-sample estimation variability using a
+parametric bootstrap. The estimated prior is then used to shrink noisy
+site-specific precision estimates toward the shared prior distribution.
+Setting `prior = "none"` disables precision shrinkage.
+
+
+# Fixed-Effects Analysis
+
+For cross-sectional studies or datasets in which observations are independent,
+RhyME fits a fixed-effects beta-regression cosinor model when `subject_col` is
+not specified.
+
+```{r fixed, eval=FALSE}
+se_fixed <- fitCosinor(se,
+    time_col = "time",
+    prior = "auto"
+)
+se_fixed
+```
+
+Optional sample- or subject-level confounders are named with `covariates`:
+
+```{r covariates, eval=FALSE}
+se_adjusted <- fitCosinor(se,
+    time_col = "time",
+    subject_col = "subject",
+    covariates = c("sex", "age"),
+    prior = "auto"
+)
+```
+
+Covariate coefficients and covariate-specific tests are not returned. The
+single `pvalue` column continues to represent the rhythmicity test.
+
+# Longitudinal Analysis (Mixed-Effects)
+
+For longitudinal studies, repeated observations from the same subject are
+generally correlated. Specifying `subject_col` fits a subject-specific random
+intercept to account for this within-subject correlation.
+
+
+```{r mixed}
+set.seed(1)
+se_demo <- fitCosinor(se,
+    time_col = "time",
+    subject_col = "subject",
+    prior = "auto",
+    verbose = FALSE
+)
+
+```
+
+# Parameter Estimates and Result Interpretation
+
+The output of `fitCosinor()` is the input `SummarizedExperiment` object with
+model results appended to `rowData()` and analysis-level information stored in
+`metadata()`.
+
+Specifically:
+
+- `rowData(se_demo)` contains per-CpG model estimates, circadian summary
+  hypothesis-test p-values, adjusted p-values, and convergence
+  indicators.
+- `metadata(se_demo)$RhyME` contains analysis-level information, including
+  the model design, empirical Bayes prior estimates, test settings, and fitting
+  summary.
+
+All per-CpG model results are available from `rowData(se_demo)`:
+
+```{r results}
+res <- rowData(se_demo)
+head(res)
+```
+
+The main circadian summaries are:
+
+- `amplitude_response`: estimated oscillation amplitude on the methylation
+  beta-value scale.
+- `phase`: estimated timing of peak methylation, reported in hours.
+- `mesor_response`: rhythm-adjusted mean methylation level on the beta-value
+  scale.
+
+In mixed-effects mode, response-scale summaries are reported as
+population-average quantities. The fitted methylation curve is averaged
+over the subject-specific random-intercept distribution.
+
+## Top-ranked CpG sites
+
+The function `topCpGs()` returns the top-ranked CpG sites according to the
+rhythmicity test p-value or adjusted p-value.
+
+```{r top-cpgs}
+topCpGs(se_demo, n = 10)
+```
+
+# Visualization
+
+The fitted circadian methylation pattern can be visualized using
+`plotCosinorFit()`. By default, the function displays fitted 24-hour cosinor
+curves for the top-ranked CpG sites.
+
+```{r plots, fig.width=8, fig.height=5}
+plotCosinorFit(se_demo)
+```
+
+# Session Info
+
+```{r session}
+sessionInfo()
+```

@@ -1,4 +1,4 @@
-# Script to generate example data for cirBEM package.
+# Script to generate example data for RhyME package.
 # Uses simulation rather than subsetting real data for portability.
 
 args <- commandArgs(trailingOnly = FALSE)
@@ -8,7 +8,7 @@ package_root <- if (length(file_arg)) {
 } else if (file.exists("DESCRIPTION")) {
     normalizePath(".")
 } else {
-    normalizePath(file.path("packages", "cirBEM"))
+    normalizePath(file.path("packages", "RhyME"))
 }
 out_dir <- file.path(package_root, "inst", "extdata")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)

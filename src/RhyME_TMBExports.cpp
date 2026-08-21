@@ -1,5 +1,5 @@
 // Single TMB compilation unit dispatching package model templates.
-#define TMB_LIB_INIT R_init_cirBEM
+#define TMB_LIB_INIT R_init_RhyME
 
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic ignored "-Wignored-attributes"

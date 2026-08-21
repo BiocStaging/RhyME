@@ -14,7 +14,7 @@ plotCosinorFit(
 )
 }
 \arguments{
-\item{se}{A \link[SummarizedExperiment:SummarizedExperiment-class]{SummarizedExperiment::SummarizedExperiment} object
+\item{se}{A \link[SummarizedExperiment:SummarizedExperiment]{SummarizedExperiment::SummarizedExperiment} object
 returned by \code{\link[=fitCosinor]{fitCosinor()}}.}
 
 \item{cpgs}{Character vector of CpG identifiers to plot. If NULL, the top
@@ -37,9 +37,9 @@ Overlays the fitted cosinor curve on raw beta values for a set of CpGs.
 }
 \examples{
 ex <- readRDS(system.file("extdata", "example_data.rds",
-                         package = "cirBEM"))
+                         package = "RhyME"))
 se <- ex$se[seq_len(5), ]
 fit <- fitCosinor(se, time_col = "time", subject_col = "subject",
-                  eb_shrink = FALSE, verbose = FALSE)
+                  prior = "none", verbose = FALSE)
 plotCosinorFit(fit, cpgs = rownames(fit)[1], ncol = 1)
 }

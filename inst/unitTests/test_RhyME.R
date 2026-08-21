@@ -93,7 +93,7 @@ make_test_se_fixed <- function(n_cpg = 30, n_samples = 20,
     list(se = se)
 }
 
-test_cirBEM_mixed_workflow <- function() {
+test_RhyME_mixed_workflow <- function() {
     dat <- make_test_se(n_cpg = 60, n_subjects = 5, n_timepoints = 6,
                         n_rhythmic = 10, seed = 42)
 
@@ -102,29 +102,30 @@ test_cirBEM_mixed_workflow <- function() {
         dat$se,
         time_col = "time",
         subject_col = "subject",
-        mode = "mixed",
-        eb_shrink = TRUE,
-        eb_pilot_n = 50,
-        min_cpgs = 30,
+        prior = "none",
         BPPARAM = BiocParallel::SerialParam(),
         verbose = FALSE
     )
 
     res <- SummarizedExperiment::rowData(se)
-    meta <- S4Vectors::metadata(se)$cirBEM
+    meta <- S4Vectors::metadata(se)$RhyME
 
     checkTrue(inherits(se, "SummarizedExperiment"))
     checkEquals(nrow(res), 60)
     checkEquals(meta$design$mode, "mixed")
-    checkEquals(meta$ebPrior$n_pilot, 50)
-    checkEquals(meta$ebPrior$min_cpgs, 30)
+    checkEquals(meta$prior$method, "none")
+    checkEquals(meta$test$method, "Wald")
+    checkEquals(meta$test$p.adjust.method, "BH")
+    checkEquals(length(meta$ebPrior), 0L)
     checkEquals(meta$fitSummary$total, 60)
     checkEquals(meta$fitSummary$converged, sum(res$converged %in% TRUE))
     checkEquals(meta$fitSummary$failed, 60 - sum(res$converged %in% TRUE))
     checkTrue(!"relative_amplitude" %in% names(res))
-    hidden_cols <- c("phi", "log_phi", "log_phi_pilot", "tau_id", "error",
-                     "amplitude_link", "mesor_link",
-                     "se_b0", "se_sin", "se_cos")
+    hidden_cols <- c(
+        "phi", "log_phi", "log_phi_pilot", "tau", "error",
+        "amplitude_link", "mesor_link", "statistic", "df",
+        "se_b0", "se_sin", "se_cos", "cov_sin_cos"
+    )
     checkTrue(!any(hidden_cols %in% names(res)))
 
     top <- topCpGs(se, n = 5)
@@ -140,34 +141,89 @@ test_cirBEM_mixed_workflow <- function() {
     checkTrue(inherits(p, "ggplot"))
 }
 
-test_cirBEM_fixed_wald <- function() {
+test_RhyME_fixed_tests <- function() {
     dat <- make_test_se_fixed(n_cpg = 25, n_samples = 20,
                               n_rhythmic = 5, seed = 123)
 
-    se <- fitCosinor(
+    for (method in c("Wald", "LRT")) {
+        se <- fitCosinor(
+            dat$se,
+            time_col = "time",
+            prior = "none",
+            test = method,
+            BPPARAM = BiocParallel::SerialParam(),
+            verbose = FALSE
+        )
+
+        res <- SummarizedExperiment::rowData(se)
+        meta <- S4Vectors::metadata(se)$RhyME
+        checkEquals(meta$design$mode, "fixed")
+        checkEquals(meta$test$method, method)
+        checkEquals(meta$test$p.adjust.method, "BH")
+        checkTrue(all(res$pvalue >= 0 & res$pvalue <= 1, na.rm = TRUE))
+        checkTrue(!any(c(
+            "statistic", "df", "se_b0", "se_sin", "se_cos",
+            "cov_sin_cos"
+        ) %in% names(res)))
+    }
+}
+
+test_RhyME_covariate_adjustment <- function() {
+    dat <- make_test_se(n_cpg = 12, n_subjects = 8, n_timepoints = 6,
+                        n_rhythmic = 4, seed = 314)
+    cd <- as.data.frame(SummarizedExperiment::colData(dat$se))
+    cd$sex <- factor(rep(rep(c("female", "male"), 4), each = 6))
+    cd$age <- rep(seq(30, 65, length.out = 8), each = 6)
+    SummarizedExperiment::colData(dat$se) <- S4Vectors::DataFrame(cd)
+
+    fit <- fitCosinor(
         dat$se,
         time_col = "time",
-        subject_col = NULL,
-        mode = "fixed",
-        eb_shrink = FALSE,
-        test_method = "Wald",
-        p.adjust.method = "bonferroni",
+        subject_col = "subject",
+        covariates = c("sex", "age"),
+        prior = "none",
         BPPARAM = BiocParallel::SerialParam(),
         verbose = FALSE
     )
 
-    res <- SummarizedExperiment::rowData(se)
-    meta <- S4Vectors::metadata(se)$cirBEM
+    res <- SummarizedExperiment::rowData(fit)
+    meta <- S4Vectors::metadata(fit)$RhyME
+    checkEquals(meta$design$covariates, c("sex", "age"))
+    checkTrue(any(is.finite(res$pvalue)))
+    checkTrue(!any(grepl("sex|age", names(res))))
 
-    checkEquals(meta$design$mode, "fixed")
-    checkEquals(meta$test$method, "Wald")
-    checkEquals(meta$test$p.adjust.method, "bonferroni")
-    checkTrue(all(c("se_b0", "se_sin", "se_cos") %in% names(res)))
-    checkTrue(all(res$df == 2, na.rm = TRUE))
-    checkTrue(all(res$pvalue >= 0 & res$pvalue <= 1, na.rm = TRUE))
+    X_cov <- RhyME:::.makeCovariateMatrix(cd, c("sex", "age"))
+    terms <- RhyME:::.makeCosinorTerms(cd$time)
+    design <- RhyME:::.makeDesignMatrices(terms, X_cov)
+    checkEquals(ncol(design$full), ncol(design$null) + 2L)
+    checkEquals(
+        unname(design$full[, seq_len(ncol(design$null)), drop = FALSE]),
+        unname(design$null)
+    )
 }
 
-test_cirBEM_default_assay <- function() {
+test_RhyME_mixed_wald_joint <- function() {
+    dat <- make_test_se(n_cpg = 12, n_subjects = 5, n_timepoints = 6,
+                        n_rhythmic = 4, seed = 321)
+
+    se <- fitCosinor(
+        dat$se,
+        time_col = "time",
+        subject_col = "subject",
+        prior = "none",
+        test = "Wald",
+        BPPARAM = BiocParallel::SerialParam(),
+        verbose = FALSE
+    )
+    res <- SummarizedExperiment::rowData(se)
+    usable <- which(is.finite(res$pvalue))
+
+    checkEquals(S4Vectors::metadata(se)$RhyME$design$mode, "mixed")
+    checkTrue(length(usable) > 0)
+    checkTrue(all(res$pvalue[usable] >= 0 & res$pvalue[usable] <= 1))
+}
+
+test_RhyME_default_assay <- function() {
     dat <- make_test_se_fixed(n_cpg = 20, n_samples = 18,
                               n_rhythmic = 4, seed = 99)
     SummarizedExperiment::assayNames(dat$se) <- "methylation"
@@ -175,66 +231,91 @@ test_cirBEM_default_assay <- function() {
     se <- fitCosinor(
         dat$se,
         time_col = "time",
-        eb_shrink = FALSE,
+        prior = "none",
         BPPARAM = BiocParallel::SerialParam(),
         verbose = FALSE
     )
 
-    meta <- S4Vectors::metadata(se)$cirBEM
+    meta <- S4Vectors::metadata(se)$RhyME
     checkEquals(meta$design$assay_name, "methylation")
     checkEquals(meta$design$mode, "fixed")
 }
 
-test_cirBEM_mode_resolution <- function() {
+test_RhyME_mode_inference <- function() {
     dat <- make_test_se(n_cpg = 12, n_subjects = 4, n_timepoints = 4,
                         n_rhythmic = 3, seed = 7)
 
     fixed <- fitCosinor(
         dat$se,
         time_col = "time",
-        subject_col = "subject",
-        mode = "fixed",
-        eb_shrink = FALSE,
+        prior = "none",
         BPPARAM = BiocParallel::SerialParam(),
         verbose = FALSE
     )
-    checkEquals(S4Vectors::metadata(fixed)$cirBEM$design$mode, "fixed")
-    checkTrue(is.null(S4Vectors::metadata(fixed)$cirBEM$design$subject_col))
+    checkEquals(S4Vectors::metadata(fixed)$RhyME$design$mode, "fixed")
+    checkTrue(is.null(S4Vectors::metadata(fixed)$RhyME$design$subject_col))
 
-    checkException(fitCosinor(
+    mixed <- fitCosinor(
         dat$se,
         time_col = "time",
-        subject_col = NULL,
-        mode = "mixed",
-        eb_shrink = FALSE,
+        subject_col = "subject",
+        prior = "none",
         BPPARAM = BiocParallel::SerialParam(),
         verbose = FALSE
-    ))
+    )
+    checkEquals(S4Vectors::metadata(mixed)$RhyME$design$mode, "mixed")
+    checkEquals(S4Vectors::metadata(mixed)$RhyME$design$subject_col,
+                "subject")
 }
 
-test_cirBEM_internal_summaries <- function() {
-    terms <- cirBEM:::.makeCosinorTerms(c(0, 6, 12), period = 24)
+test_RhyME_internal_summaries <- function() {
+    terms <- RhyME:::.makeCosinorTerms(c(0, 6, 12), period = 24)
     checkEquals(terms$sin_term, c(0, 1, 0), tolerance = 1e-10)
     checkEquals(terms$cos_term, c(1, 0, -1), tolerance = 1e-10)
 
-    params <- cirBEM:::.computeCircadianParams(
+    params <- RhyME:::.computeCircadianParams(
         b0 = 0, b_sin = 0.3, b_cos = 0.4, period = 24
     )
     checkEquals(names(params), c("amplitude_link", "amplitude_response",
                                  "phase", "mesor_link", "mesor_response"))
     checkEquals(params$amplitude_link, 0.5, tolerance = 1e-10)
 
-    marginal <- cirBEM:::.computeCircadianParams(
-        b0 = -1, b_sin = 0.5, b_cos = 0.3, period = 24, tau_id = 1
+    # With eta(t) = sin(2*pi*t/24), the fitted peak is at 6 h.
+    sine_peak <- RhyME:::.computeCircadianParams(
+        b0 = 0, b_sin = 1, b_cos = 0, period = 24
+    )
+    checkEquals(sine_peak$phase, 6, tolerance = 1e-10)
+
+    # The numerical period average must not count both 0 h and 24 h.
+    grid_params <- RhyME:::.computeCircadianParams(
+        b0 = -0.4, b_sin = 0.7, b_cos = 0.2,
+        period = 24, grid_by = 1
+    )
+    tgrid <- 0:23
+    expected_mesor <- mean(plogis(
+        -0.4 + 0.7 * sin(2 * pi * tgrid / 24) +
+            0.2 * cos(2 * pi * tgrid / 24)
+    ))
+    checkEquals(grid_params$mesor_response, expected_mesor,
+                tolerance = 1e-12)
+
+    marginal <- RhyME:::.computeCircadianParams(
+        b0 = -1, b_sin = 0.5, b_cos = 0.3, period = 24, tau = 1
     )
     checkTrue(!isTRUE(all.equal(params$mesor_response,
                                 marginal$mesor_response)))
 
     set.seed(42)
-    log_phi <- rnorm(500, mean = 3.0, sd = 0.5)
-    prior <- cirBEM:::ebShrinkPhi(log_phi, trim = 0)
+    log_phi <- rnorm(2000, mean = 3.0, sd = 0.5)
+    prior <- RhyME:::.estimateLogPhiPrior(log_phi)
+    checkEquals(names(prior), c("mean", "sd"))
     checkEquals(prior$mean, 3.0, tolerance = 0.15)
     checkEquals(prior$sd, 0.5, tolerance = 0.15)
 
-    checkException(cirBEM:::ebShrinkPhi(rep(NA_real_, 10)))
+    contaminated <- c(log_phi, -100, 100)
+    robust_prior <- RhyME:::.estimateLogPhiPrior(contaminated)
+    checkEquals(robust_prior$mean, prior$mean, tolerance = 0.02)
+    checkEquals(robust_prior$sd, prior$sd, tolerance = 0.02)
+
+    checkException(RhyME:::.estimateLogPhiPrior(rep(NA_real_, 10)))
 }

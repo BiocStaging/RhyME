@@ -2,33 +2,24 @@
 % Please edit documentation in R/fitCosinor.R
 \name{fitCosinor}
 \alias{fitCosinor}
-\title{Fit cosinor beta regression models across CpG sites}
+\title{Fit RhyME across CpG sites}
 \usage{
 fitCosinor(
   se,
-  assay_name = NULL,
   time_col = "time",
   subject_col = NULL,
-  mode = NULL,
+  assay_name = NULL,
   period = 24,
-  eb_shrink = TRUE,
-  eb_trim = 0,
-  eb_pilot_n = 10000L,
-  min_cpgs = 100L,
-  squeeze_bounds = c(1e-04, 1 - 1e-04),
-  test_method = c("LRT", "Wald"),
-  p.adjust.method = "BH",
+  prior = c("auto", "none"),
+  test = c("Wald", "LRT"),
   BPPARAM = BiocParallel::MulticoreParam(),
   verbose = TRUE,
-  progressbar = verbose
+  covariates = NULL
 )
 }
 \arguments{
-\item{se}{A \link[SummarizedExperiment:SummarizedExperiment-class]{SummarizedExperiment::SummarizedExperiment} object. The
+\item{se}{A \link[SummarizedExperiment:SummarizedExperiment]{SummarizedExperiment::SummarizedExperiment} object. The
 specified assay should contain methylation beta values in (0, 1).}
-
-\item{assay_name}{Character or NULL, name of the assay to use. The default
-NULL uses the first assay in \code{se}.}
 
 \item{time_col}{Character, column name in \code{colData(se)} containing
 collection times in hours (default \code{"time"}).}
@@ -37,70 +28,56 @@ collection times in hours (default \code{"time"}).}
 subject identifiers. If non-NULL, random intercepts per subject are
 included (mixed-effects mode). If NULL, fixed-effects mode is used.}
 
-\item{mode}{Character or NULL. Set to \code{"mixed"} to fit random subject
-intercepts or \code{"fixed"} to fit a fixed-effects model. The default \code{NULL}
-uses \code{"mixed"} when \code{subject_col} is supplied and \code{"fixed"} otherwise.}
+\item{covariates}{Character vector or NULL. Optional \code{colData(se)} columns
+included as adjustment covariates in both the rhythmic and null models.
+Covariate coefficients are treated as nuisance parameters and are not
+tested or returned.}
+
+\item{assay_name}{Character or NULL, name of the assay to use. The default
+NULL uses the first assay in \code{se}.}
 
 \item{period}{Numeric, the oscillation period in hours (default 24 for
 circadian rhythms). Can be set to other values for ultradian or
 infradian rhythms.}
 
-\item{eb_shrink}{Logical, whether to apply empirical Bayes shrinkage to
-the precision parameter (default TRUE). This performs a two-pass fit:
-a pilot fit to estimate the prior, then a re-fit with the prior.}
+\item{prior}{Character, either \code{"auto"} (default) to estimate a robust,
+bootstrap-corrected empirical-Bayes prior for log(phi), or \code{"none"} for
+ordinary maximum likelihood.}
 
-\item{eb_trim}{Numeric, fraction to trim from each tail when estimating
-the EB prior (default 0, i.e. no trimming; the prior uses the full pilot
-log(phi) distribution). Increase (e.g. 0.02) to make the prior robust to
-pilot outliers. Set \code{eb_shrink = FALSE} to disable the prior entirely.}
+\item{test}{Rhythmicity test: a covariance-aware joint Wald test of the sine
+and cosine coefficients (\code{"Wald"}, default), or a likelihood-ratio test
+(\code{"LRT"}).}
 
-\item{eb_pilot_n}{Integer, maximum number of CpGs to use for estimating the
-EB prior (default 10000). If the dataset has fewer CpGs, all CpGs are used.
-Random sampling uses R's current RNG state; call \code{\link[=set.seed]{set.seed()}} before
-\code{\link[=fitCosinor]{fitCosinor()}} for reproducible pilot selection.}
+\item{BPPARAM}{A \link[BiocParallel:BiocParallelParam]{BiocParallel::BiocParallelParam} object for execution.
+Defaults to \code{\link[BiocParallel:MulticoreParam]{BiocParallel::MulticoreParam()}} for parallel fitting on
+Unix-like systems. Pass \code{\link[BiocParallel:SerialParam]{BiocParallel::SerialParam()}} for serial fitting or
+\code{\link[BiocParallel:SnowParam]{BiocParallel::SnowParam()}} for socket-based parallelism.}
 
-\item{min_cpgs}{Integer, minimum number of valid pilot CpGs required to
-estimate the EB prior (default 100). Lower this for small example or pilot
-datasets; increase it for large genome-wide analyses.}
-
-\item{squeeze_bounds}{Numeric vector of length 2. Beta values are clamped
-to this open interval to avoid boundary issues (default \code{c(1e-4, 1-1e-4)}).}
-
-\item{test_method}{Character, rhythmicity test to report. \code{"LRT"} (default)
-uses the likelihood ratio test computed during model fitting; \code{"Wald"}
-uses a joint Wald test that \code{b_sin = b_cos = 0}.}
-
-\item{p.adjust.method}{Character, p-value adjustment method passed to
-\code{\link[stats:p.adjust]{stats::p.adjust()}} (default \code{"BH"}).}
-
-\item{BPPARAM}{A \link[BiocParallel:BiocParallelParam-class]{BiocParallel::BiocParallelParam} object for execution.
-Defaults to \code{\link[BiocParallel:MulticoreParam-class]{BiocParallel::MulticoreParam()}} for parallel fitting on
-Unix-like systems. Pass \code{\link[BiocParallel:SerialParam-class]{BiocParallel::SerialParam()}} for serial fitting or
-\code{\link[BiocParallel:SnowParam-class]{BiocParallel::SnowParam()}} for socket-based parallelism.}
-
-\item{verbose}{Logical, print progress messages (default TRUE).}
-
-\item{progressbar}{Logical, show BiocParallel progress bars when supported
-by \code{BPPARAM} (default follows \code{verbose}).}
+\item{verbose}{Logical, print messages and show supported progress bars.}
 }
 \value{
 The input \code{SummarizedExperiment} with per-CpG results appended to
 \code{rowData(se)} and design info, EB prior, test settings, and fit summary
-stored in \code{metadata(se)$cirBEM}.
+stored in \code{metadata(se)$RhyME}.
+}
+\details{
+When \code{covariates} are supplied, their centered design columns are
+included in both the full and null models. Consequently, the reported
+p-value still tests only the joint sine/cosine rhythmicity effect, while
+response-scale summaries describe the mean covariate profile.
 }
 \description{
-Fits a beta regression model with cosinor terms (sin and cos of
-\code{2 * pi * time / period}) to each CpG site in a methylation array
+Fits a RhyME to each CpG site in a methylation array
 dataset. Supports both fixed-effects (cross-sectional) and mixed-effects
 (repeated measures with random intercepts) designs, and optionally
 applies empirical Bayes shrinkage to the precision parameter (phi).
 }
 \examples{
 ex <- readRDS(system.file("extdata", "example_data.rds",
-                         package = "cirBEM"))
+                         package = "RhyME"))
 se <- ex$se[seq_len(5), ]
 
 fit <- fitCosinor(se, time_col = "time", subject_col = "subject",
-                  eb_shrink = FALSE, verbose = FALSE)
+                  prior = "none", verbose = FALSE)
 head(SummarizedExperiment::rowData(fit))
 }

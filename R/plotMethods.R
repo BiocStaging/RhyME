@@ -17,10 +17,10 @@
 #'
 #' @examples
 #' ex <- readRDS(system.file("extdata", "example_data.rds",
-#'                          package = "cirBEM"))
+#'                          package = "RhyME"))
 #' se <- ex$se[seq_len(5), ]
 #' fit <- fitCosinor(se, time_col = "time", subject_col = "subject",
-#'                   eb_shrink = FALSE, verbose = FALSE)
+#'                   prior = "none", verbose = FALSE)
 #' plotCosinorFit(fit, cpgs = rownames(fit)[1], ncol = 1)
 plotCosinorFit <- function(se, cpgs = NULL,
                            assay_name = NULL,
@@ -28,7 +28,7 @@ plotCosinorFit <- function(se, cpgs = NULL,
                            ncol = 3, n_grid = 200) {
 
     res <- rowData(se)
-    design <- metadata(se)$cirBEM$design
+    design <- metadata(se)$RhyME$design
     period <- design$period
 
     if (is.null(cpgs)) {
@@ -36,9 +36,9 @@ plotCosinorFit <- function(se, cpgs = NULL,
         cpgs <- top$cpg
     }
 
-    assay_name <- .resolveAssayName(se, assay_name)
-    times <- as.numeric(colData(se)[[time_col]])
-    beta_mat <- .getAssay(se, assay_name)
+    input <- .getRhyMEInput(se, assay_name, time_col)
+    times <- input$col_data[[time_col]]
+    beta_mat <- input$beta
 
     # Build raw data
     raw_list <- lapply(cpgs, function(cg) {

@@ -4,7 +4,7 @@
 #' @param b_sin Numeric vector of sin coefficients.
 #' @param b_cos Numeric vector of cos coefficients.
 #' @param period Numeric, the period in hours.
-#' @param tau_id Numeric vector of random-intercept SD estimates. Used to
+#' @param tau Numeric vector of random-intercept SD estimates. Used to
 #'   recover marginal response-scale curves in mixed mode.
 #' @param grid_by Numeric, step size for the numerical time grid.
 #' @param mc_n Integer, number of fixed normal quantile nodes used to average
@@ -13,32 +13,23 @@
 #'   mesor_link, mesor_response.
 #' @noRd
 .computeCircadianParams <- function(b0, b_sin, b_cos, period = 24,
-                                    tau_id = NULL, grid_by = 0.1,
+                                    tau = NULL, grid_by = 0.1,
                                     mc_n = 200) {
     n <- length(b0)
-    if (is.null(tau_id)) {
-        tau_id <- rep(NA_real_, n)
-    }
-    if (length(tau_id) != n) {
-        stop("'tau_id' must be NULL or the same length as 'b0'.",
-             call. = FALSE)
-    }
-    if (!is.numeric(mc_n) || length(mc_n) != 1L ||
-        !is.finite(mc_n) || mc_n < 1) {
-        stop("'mc_n' must be a positive integer.", call. = FALSE)
-    }
+    if (is.null(tau)) tau <- rep(NA_real_, n)
     mc_n <- as.integer(mc_n)
 
     # Amplitude on link scale
     amplitude_link <- sqrt(b_sin^2 + b_cos^2)
 
     # Phase is reported as the fitted peak time in hours.
-    phase_rad <- atan2(-b_sin, b_cos)
+    phase_rad <- atan2(b_sin, b_cos)
     phase <- (phase_rad / (2 * pi) * period) %% period
 
     # MESOR and amplitude on response scale via numerical grid. In mixed mode,
-    # average over U ~ N(0, tau_id^2) using deterministic normal quantile nodes.
+    # average over U ~ N(0, tau^2) using deterministic normal quantile nodes.
     tgrid <- seq(0, period, by = grid_by)
+    tgrid <- tgrid[tgrid < period]
     omega <- 2 * pi / period
     S <- sin(omega * tgrid)
     C <- cos(omega * tgrid)
@@ -50,8 +41,8 @@
     for (i in seq_len(n)) {
         if (is.na(b0[i]) || is.na(b_sin[i]) || is.na(b_cos[i])) next
         eta <- b0[i] + b_sin[i] * S + b_cos[i] * C
-        if (is.finite(tau_id[i]) && tau_id[i] > 0) {
-            mu <- colMeans(.invlogit(outer(tau_id[i] * z, eta, "+")))
+        if (is.finite(tau[i]) && tau[i] > 0) {
+            mu <- colMeans(.invlogit(outer(tau[i] * z, eta, "+")))
         } else {
             mu <- .invlogit(eta)
         }
@@ -84,10 +75,10 @@
 #'
 #' @examples
 #' ex <- readRDS(system.file("extdata", "example_data.rds",
-#'                          package = "cirBEM"))
+#'                          package = "RhyME"))
 #' se <- ex$se[seq_len(5), ]
 #' fit <- fitCosinor(se, time_col = "time", subject_col = "subject",
-#'                   eb_shrink = FALSE, verbose = FALSE)
+#'                   prior = "none", verbose = FALSE)
 #' topCpGs(fit, n = 3)
 topCpGs <- function(se, n = 10, sort_by = "pvalue") {
     res <- rowData(se)
