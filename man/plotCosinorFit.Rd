@@ -8,7 +8,7 @@ plotCosinorFit(
   se,
   cpgs = NULL,
   assay_name = NULL,
-  time_col = "time",
+  time_col = NULL,
   ncol = 3,
   n_grid = 200
 )
@@ -20,10 +20,11 @@ returned by \code{\link[=fitCosinor]{fitCosinor()}}.}
 \item{cpgs}{Character vector of CpG identifiers to plot. If NULL, the top
 6 CpGs by p-value are plotted.}
 
-\item{assay_name}{Character or NULL, assay name in \code{se}. The default NULL
-uses the first assay in \code{se}.}
+\item{assay_name}{Character or NULL. By default, use the assay recorded by
+\code{\link[=fitCosinor]{fitCosinor()}}.}
 
-\item{time_col}{Character, time column in colData (default \code{"time"}).}
+\item{time_col}{Character or NULL. By default, use the time column recorded
+by \code{\link[=fitCosinor]{fitCosinor()}}.}
 
 \item{ncol}{Integer, number of columns in facet layout (default 3).}
 

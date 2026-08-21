@@ -228,6 +228,22 @@
         stop(sprintf("Column '%s' in colData must be numeric (hours).",
                      time_col), call. = FALSE)
     }
+    if (anyNA(cd[[time_col]]) || any(!is.finite(cd[[time_col]]))) {
+        stop(sprintf("Column '%s' in colData must contain finite times.",
+                     time_col), call. = FALSE)
+    }
+    if (!is.null(subject_col)) {
+        subject <- cd[[subject_col]]
+        invalid_subject <- anyNA(subject) ||
+            (is.numeric(subject) && any(!is.finite(subject))) ||
+            any(!nzchar(as.character(subject)))
+        if (invalid_subject) {
+            stop(sprintf(
+                "Column '%s' in colData contains missing or invalid subjects.",
+                subject_col
+            ), call. = FALSE)
+        }
+    }
 
     if (is.null(assay_name)) {
         beta <- assay(se, 1L)
@@ -236,6 +252,22 @@
                           nzchar(available[1])) available[1] else NULL
     } else {
         beta <- assay(se, assay_name)
+    }
+
+    cpg_ids <- rownames(beta)
+    if (is.null(cpg_ids) || length(cpg_ids) != nrow(beta) ||
+        anyNA(cpg_ids) || any(!nzchar(cpg_ids)) || anyDuplicated(cpg_ids)) {
+        stop("The fitted assay must have unique, non-missing CpG row names.",
+             call. = FALSE)
+    }
+    if (!is.numeric(beta)) {
+        stop("The fitted assay must contain numeric beta values.",
+             call. = FALSE)
+    }
+    if (any(is.infinite(beta), na.rm = TRUE) ||
+        any(beta < 0 | beta > 1, na.rm = TRUE)) {
+        stop("Observed beta values must be finite and within [0, 1].",
+             call. = FALSE)
     }
 
     list(beta = beta, col_data = cd, assay_name = assay_name)

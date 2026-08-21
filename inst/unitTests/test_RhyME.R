@@ -121,9 +121,14 @@ test_RhyME_mixed_workflow <- function() {
     checkEquals(meta$fitSummary$converged, sum(res$converged %in% TRUE))
     checkEquals(meta$fitSummary$failed, 60 - sum(res$converged %in% TRUE))
     checkTrue(!"relative_amplitude" %in% names(res))
+    returned_summaries <- c("amplitude_link", "mesor_link", "tau")
+    checkTrue(all(returned_summaries %in% names(res)))
+    checkEquals(res$amplitude_link,
+                sqrt(res$b_sin^2 + res$b_cos^2), tolerance = 1e-10)
+    checkEquals(res$mesor_link, res$b0, tolerance = 1e-10)
+    checkTrue(any(is.finite(res$tau)))
     hidden_cols <- c(
-        "phi", "log_phi", "log_phi_pilot", "tau", "error",
-        "amplitude_link", "mesor_link", "statistic", "df",
+        "phi", "log_phi", "log_phi_pilot", "error", "statistic", "df",
         "se_b0", "se_sin", "se_cos", "cov_sin_cos"
     )
     checkTrue(!any(hidden_cols %in% names(res)))
@@ -318,4 +323,85 @@ test_RhyME_internal_summaries <- function() {
     checkEquals(robust_prior$sd, prior$sd, tolerance = 0.02)
 
     checkException(RhyME:::.estimateLogPhiPrior(rep(NA_real_, 10)))
+}
+
+test_RhyME_plot_uses_fitted_design <- function() {
+    dat <- make_test_se(n_cpg = 8, n_subjects = 4, n_timepoints = 5,
+                        n_rhythmic = 3, seed = 909)
+    methylation <- SummarizedExperiment::assay(dat$se, "beta")
+    decoy <- methylation
+    decoy[] <- 0.99
+
+    cd <- as.data.frame(SummarizedExperiment::colData(dat$se))
+    cd$collection_hour <- cd$time
+    cd$time <- NULL
+    se_input <- SummarizedExperiment::SummarizedExperiment(
+        assays = list(decoy = decoy, methylation = methylation),
+        colData = S4Vectors::DataFrame(cd)
+    )
+
+    fit <- fitCosinor(
+        se_input,
+        assay_name = "methylation",
+        time_col = "collection_hour",
+        subject_col = "subject",
+        prior = "none",
+        BPPARAM = BiocParallel::SerialParam(),
+        verbose = FALSE
+    )
+    res <- SummarizedExperiment::rowData(fit)
+    cpg <- rownames(fit)[which(res$converged %in% TRUE)[1]]
+    p <- plotCosinorFit(fit, cpgs = cpg, n_grid = 20)
+    built <- ggplot2::ggplot_build(p)
+
+    checkEquals(built$data[[1]]$y, as.numeric(methylation[cpg, ]),
+                tolerance = 1e-12)
+
+    tgrid <- seq(0, 24, length.out = 20)
+    b0 <- res[cpg, "b0", drop = TRUE]
+    b_sin <- res[cpg, "b_sin", drop = TRUE]
+    b_cos <- res[cpg, "b_cos", drop = TRUE]
+    tau <- res[cpg, "tau", drop = TRUE]
+    eta <- b0 + b_sin * sin(2 * pi * tgrid / 24) +
+        b_cos * cos(2 * pi * tgrid / 24)
+    z <- qnorm((seq_len(200L) - 0.5) / 200L)
+    expected <- colMeans(plogis(outer(tau * z, eta, "+")))
+    checkEquals(built$data[[2]]$y, expected, tolerance = 1e-12)
+}
+
+test_RhyME_input_validation <- function() {
+    dat <- make_test_se(n_cpg = 6, n_subjects = 4, n_timepoints = 4,
+                        n_rhythmic = 2, seed = 808)
+    fit_bad <- function(se) {
+        fitCosinor(
+            se,
+            time_col = "time",
+            subject_col = "subject",
+            prior = "none",
+            BPPARAM = BiocParallel::SerialParam(),
+            verbose = FALSE
+        )
+    }
+
+    bad_names <- dat$se
+    rownames(bad_names) <- NULL
+    checkException(fit_bad(bad_names))
+
+    bad_time <- dat$se
+    cd <- as.data.frame(SummarizedExperiment::colData(bad_time))
+    cd$time[1] <- NA_real_
+    SummarizedExperiment::colData(bad_time) <- S4Vectors::DataFrame(cd)
+    checkException(fit_bad(bad_time))
+
+    bad_subject <- dat$se
+    cd <- as.data.frame(SummarizedExperiment::colData(bad_subject))
+    cd$subject[1] <- NA_character_
+    SummarizedExperiment::colData(bad_subject) <- S4Vectors::DataFrame(cd)
+    checkException(fit_bad(bad_subject))
+
+    bad_beta <- dat$se
+    beta <- SummarizedExperiment::assay(bad_beta, "beta")
+    beta[1, 1] <- 1.01
+    SummarizedExperiment::assay(bad_beta, "beta") <- beta
+    checkException(fit_bad(bad_beta))
 }

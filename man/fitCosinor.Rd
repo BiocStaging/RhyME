@@ -19,7 +19,8 @@ fitCosinor(
 }
 \arguments{
 \item{se}{A \link[SummarizedExperiment:SummarizedExperiment]{SummarizedExperiment::SummarizedExperiment} object. The
-specified assay should contain methylation beta values in (0, 1).}
+specified assay should contain methylation beta values in [0, 1]. Values
+exactly at the boundaries are moved slightly inward for beta regression.}
 
 \item{time_col}{Character, column name in \code{colData(se)} containing
 collection times in hours (default \code{"time"}).}

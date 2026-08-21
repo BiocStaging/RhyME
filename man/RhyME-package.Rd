@@ -8,14 +8,14 @@
 \description{
 \if{html}{\figure{logo.png}{options: style='float: right' alt='logo' width='120'}}
 
-Fits cosinor-based beta regression models for detecting circadian rhythmicity in DNA methylation array data using Template Model Builder (TMB) for efficient likelihood optimization. Supports fixed-effects (cross-sectional) and mixed-effects (repeated measures) designs with configurable period. Implements empirical Bayes shrinkage of the beta distribution precision parameter across CpG sites, analogous to limma's moderated variance, to improve genome-wide inference. Provides amplitude, phase, and MESOR estimation on both logit-link and response scales.
+Fits cosinor-based beta regression models for detecting circadian rhythmicity in DNA methylation array data using Template Model Builder (TMB) for efficient likelihood optimization. Supports fixed-effects (cross-sectional) and mixed-effects (repeated measures) designs with configurable period and adjustment covariates. Implements empirical Bayes shrinkage of the beta distribution precision parameter across CpG sites, analogous to limma's moderated variance, to improve genome-wide inference. Provides amplitude, phase, and MESOR estimation on both logit-link and response scales.
 }
 \author{
-\strong{Maintainer}: yx h \email{yixiang.hong@uth.tmc.edu}
+\strong{Maintainer}: Yixiang Hong \email{yixiang.hong@uth.tmc.edu}
 
 Authors:
 \itemize{
-  \item yx h \email{yixiang.hong@uth.tmc.edu}
+  \item Yixiang Hong \email{yixiang.hong@uth.tmc.edu}
 }
 
 }

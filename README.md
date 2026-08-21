@@ -25,13 +25,21 @@ robustly, and uses five common-precision parametric-bootstrap datasets by
 default to correct finite-sample center bias and fitting-noise variance.
 
 The main output is a `SummarizedExperiment` with fitted per-CpG results appended
-to `rowData()`, including coefficient estimates, response-scale amplitude,
-phase, MESOR, p-values, adjusted p-values, and convergence
-status.
+to `rowData()`, including coefficient estimates, link- and response-scale
+amplitude and MESOR, phase, random-intercept standard deviation, p-values,
+adjusted p-values, and convergence status.
 
 ## Installation
 
-Install the development version from GitHub:
+After RhyME becomes available through Bioconductor, install it with:
+
+```r
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("RhyME")
+```
+
+Install the development version from GitHub with:
 
 ```r
 remotes::install_github("njuelsdke/RhyME")

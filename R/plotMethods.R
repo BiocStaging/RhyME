@@ -6,9 +6,10 @@
 #'   returned by [fitCosinor()].
 #' @param cpgs Character vector of CpG identifiers to plot. If NULL, the top
 #'   6 CpGs by p-value are plotted.
-#' @param assay_name Character or NULL, assay name in `se`. The default NULL
-#'   uses the first assay in `se`.
-#' @param time_col Character, time column in colData (default `"time"`).
+#' @param assay_name Character or NULL. By default, use the assay recorded by
+#'   [fitCosinor()].
+#' @param time_col Character or NULL. By default, use the time column recorded
+#'   by [fitCosinor()].
 #' @param ncol Integer, number of columns in facet layout (default 3).
 #' @param n_grid Integer, resolution of fitted curve grid (default 200).
 #'
@@ -24,11 +25,16 @@
 #' plotCosinorFit(fit, cpgs = rownames(fit)[1], ncol = 1)
 plotCosinorFit <- function(se, cpgs = NULL,
                            assay_name = NULL,
-                           time_col = "time",
+                           time_col = NULL,
                            ncol = 3, n_grid = 200) {
 
     res <- rowData(se)
     design <- metadata(se)$RhyME$design
+    if (is.null(design)) {
+        stop("'se' does not contain RhyME fit metadata.", call. = FALSE)
+    }
+    if (is.null(assay_name)) assay_name <- design$assay_name
+    if (is.null(time_col)) time_col <- design$time_col
     period <- design$period
 
     if (is.null(cpgs)) {
@@ -54,16 +60,24 @@ plotCosinorFit <- function(se, cpgs = NULL,
     # Build fitted curves
     tgrid <- seq(0, period, length.out = n_grid)
     omega <- 2 * pi / period
+    z <- stats::qnorm((seq_len(200L) - 0.5) / 200L)
     fit_list <- lapply(cpgs, function(cg) {
         b0 <- res[cg, "b0", drop = TRUE]
         bs <- res[cg, "b_sin", drop = TRUE]
         bc <- res[cg, "b_cos", drop = TRUE]
         if (is.na(b0)) return(NULL)
         eta <- b0 + bs * sin(omega * tgrid) + bc * cos(omega * tgrid)
+        tau <- res[cg, "tau", drop = TRUE]
+        fitted <- if (identical(design$mode, "mixed") &&
+                      is.finite(tau) && tau > 0) {
+            colMeans(.invlogit(outer(tau * z, eta, "+")))
+        } else {
+            .invlogit(eta)
+        }
         data.frame(
             cpg  = cg,
             time = tgrid,
-            fitted = .invlogit(eta),
+            fitted = fitted,
             stringsAsFactors = FALSE
         )
     })

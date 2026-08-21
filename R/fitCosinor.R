@@ -6,7 +6,8 @@
 #' applies empirical Bayes shrinkage to the precision parameter (phi).
 #'
 #' @param se A [SummarizedExperiment::SummarizedExperiment] object. The
-#'   specified assay should contain methylation beta values in (0, 1).
+#'   specified assay should contain methylation beta values in [0, 1]. Values
+#'   exactly at the boundaries are moved slightly inward for beta regression.
 #' @param time_col Character, column name in `colData(se)` containing
 #'   collection times in hours (default `"time"`).
 #' @param subject_col Character or NULL. Column name in `colData(se)` for
@@ -89,7 +90,7 @@ fitCosinor <- function(se,
     cd <- input$col_data
     assay_name <- input$assay_name
     cpg_ids <- rownames(beta_mat)
-    n_cpg <- length(cpg_ids)
+    n_cpg <- nrow(beta_mat)
 
     # Build per-sample data frame with cosinor terms
     cos_terms <- .makeCosinorTerms(cd[[time_col]], period = period)
@@ -240,9 +241,12 @@ fitCosinor <- function(se,
         b0 = b0,
         b_sin = b_sin,
         b_cos = b_cos,
+        amplitude_link = circ$amplitude_link,
         amplitude_response = circ$amplitude_response,
         phase = circ$phase,
+        mesor_link = circ$mesor_link,
         mesor_response = circ$mesor_response,
+        tau = tau,
         pvalue = pvalue,
         padj = stats::p.adjust(pvalue, method = "BH"),
         converged = flag("converged"),

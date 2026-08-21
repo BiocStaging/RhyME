@@ -1,6 +1,9 @@
 ---
 title: "Detecting Circadian Rhythmicity in DNA Methylation with RhyME"
-date: ""
+author: "Yixiang Hong"
+date: "Last modified: 21 August 2026"
+bibliography: references.bib
+link-citations: true
 output:
   BiocStyle::html_document:
     toc: true
@@ -36,6 +39,16 @@ account for repeated measurements. To improve stability in genome-wide analyses,
 RhyME also incorporates empirical Bayesian shrinkage of the beta-regression
 precision parameter.
 
+The modeling framework builds on beta regression [@ferrari2004], cosinor
+rhythmometry [@cornelissen2014], and Template Model Builder's automatic
+differentiation and Laplace approximation [@kristensen2016]. Related tools such
+as MetaCycle combine established periodicity-detection methods for general
+time-series data [@wu2016], whereas RhyME is designed specifically for bounded
+methylation beta values and repeated-measures designs.
+
+Package source and issue tracking are available at
+<https://github.com/njuelsdke/RhyME>.
+
 This vignette demonstrates how to use RhyME for:
 
 1. Fitting fixed- and mixed-effect beta-regression cosinor models to methylation
@@ -45,7 +58,17 @@ This vignette demonstrates how to use RhyME for:
 
 # Installation
 
+After RhyME becomes available through Bioconductor, install it with:
+
 ```{r install, eval=FALSE}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("RhyME")
+```
+
+The development version is available from GitHub:
+
+```{r install-github, eval=FALSE}
 remotes::install_github("njuelsdke/RhyME")
 ```
 
@@ -85,6 +108,12 @@ with
 + \beta_{sg}\sin(2\pi t_{ij}/P)
 + \mathbf{x}_{ij}^{\mathsf T}\boldsymbol{\gamma}_g
 + b_{gi}.
+\]
+
+For the mixed-effects model, the subject-specific random intercept follows
+
+\[
+b_{gi} \sim \mathcal{N}(0,\tau_g^2).
 \]
 
 For longitudinal data, \(b_{gi}\) is a subject-specific random intercept.
@@ -185,15 +214,20 @@ head(res)
 
 The main circadian summaries are:
 
+- `amplitude_link`: fitted oscillation amplitude on the logit-link scale.
 - `amplitude_response`: estimated oscillation amplitude on the methylation
   beta-value scale.
 - `phase`: estimated timing of peak methylation, reported in hours.
+- `mesor_link`: fitted MESOR on the logit-link scale.
 - `mesor_response`: rhythm-adjusted mean methylation level on the beta-value
   scale.
+- `tau`: estimated subject-specific random-intercept standard deviation in
+  mixed-effects mode; `NA` for fixed-effects fits.
 
 In mixed-effects mode, response-scale summaries are reported as
 population-average quantities. The fitted methylation curve is averaged
-over the subject-specific random-intercept distribution.
+over the subject-specific random-intercept distribution, and
+`plotCosinorFit()` displays the same population-average curve by default.
 
 ## Top-ranked CpG sites
 
@@ -213,6 +247,10 @@ curves for the top-ranked CpG sites.
 ```{r plots, fig.width=8, fig.height=5}
 plotCosinorFit(se_demo)
 ```
+
+# References
+
+<div id="refs"></div>
 
 # Session Info
 

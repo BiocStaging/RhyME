@@ -1,7 +1,7 @@
 Package: RhyME
 Title: Beta Regression Cosinor Models for Circadian Methylation Analysis
 Version: 0.99.0
-Authors@R: person("yx", "h",
+Authors@R: person("Yixiang", "Hong",
     email = "yixiang.hong@uth.tmc.edu", role = c("aut", "cre"))
 Description: Fits cosinor-based beta regression models for detecting circadian
     rhythmicity in DNA methylation array data using Template Model Builder
