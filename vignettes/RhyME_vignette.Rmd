@@ -149,19 +149,22 @@ not specified.
 ```{r fixed, eval=FALSE}
 se_fixed <- fitCosinor(se,
     time_col = "time",
-    prior = "auto"
+    prior = "none"
 )
 se_fixed
 ```
 
 Optional sample- or subject-level confounders are named with `covariates`:
 
+The bundled example data do not contain `sex` or `age`; the following code is
+illustrative and assumes that both variables are present in `colData(se)`.
+
 ```{r covariates, eval=FALSE}
 se_adjusted <- fitCosinor(se,
     time_col = "time",
     subject_col = "subject",
     covariates = c("sex", "age"),
-    prior = "auto"
+    prior = "none"
 )
 ```
 
@@ -189,6 +192,15 @@ se_demo <- fitCosinor(se,
 The evaluated example disables empirical-Bayes shrinkage to keep package builds
 fast. For a genome-wide analysis, enable automatic prior estimation and its
 bootstrap correction with `prior = "auto"`.
+
+```{r genome-wide-auto-prior, eval=FALSE}
+fit_auto <- fitCosinor(
+    example$se,
+    time_col = "time",
+    subject_col = "subject",
+    prior = "auto"
+)
+```
 
 # Parameter Estimates and Result Interpretation
 
