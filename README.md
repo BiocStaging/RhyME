@@ -20,15 +20,6 @@ subject-level random intercept. It also provides empirical Bayes shrinkage of
 the beta-distribution precision parameter across CpG sites to stabilize
 genome-wide inference.
 
-The automatic prior starts from a no-prior pilot fit, summarizes log precision
-robustly, and uses five common-precision parametric-bootstrap datasets by
-default to correct finite-sample center bias and fitting-noise variance.
-
-The main output is a `SummarizedExperiment` with fitted per-CpG results appended
-to `rowData()`, including coefficient estimates, link- and response-scale
-amplitude and MESOR, phase, random-intercept standard deviation, p-values,
-adjusted p-values, and convergence status.
-
 ## Installation
 
 After RhyME becomes available through Bioconductor, install it with:
@@ -65,11 +56,10 @@ fit <- fitCosinor(
 If `subject_col` is supplied, `fitCosinor()` uses a mixed-effects model by
 default. If `subject_col = NULL`, it uses a fixed-effects model. Optional
 `covariates` are included in both the rhythmic and null models as nuisance
-adjustment terms; the reported p-value tests only the sine/cosine effect.
+adjustment terms.
 
-By default, rhythmicity is tested with a covariance-aware joint Wald test of
-the sine and cosine coefficients. The automatic prior uses 10,000 pilot CpGs
-and five bootstrap replicates:
+By default, rhythmicity is tested with a joint Wald test of
+the sine and cosine coefficients. 
 
 ```r
 set.seed(1)
@@ -81,12 +71,6 @@ fit <- fitCosinor(
     test = "Wald"
 )
 ```
-
-Use `test = "LRT"` to request a likelihood-ratio test instead. Selecting
-`prior = "auto"` always applies the bootstrap correction; use `prior = "none"`
-to fit without a prior.
-The default bootstrap-corrected prior requires at least 1,000 finite pilot
-CpG fits.
 
 Top rhythmic CpGs can be extracted with:
 
