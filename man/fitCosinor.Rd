@@ -41,9 +41,9 @@ NULL uses the first assay in \code{se}.}
 circadian rhythms). Can be set to other values for ultradian or
 infradian rhythms.}
 
-\item{prior}{Character, either \code{"auto"} (default) to estimate a robust,
-bootstrap-corrected empirical-Bayes prior for log(phi), or \code{"none"} for
-ordinary maximum likelihood.}
+\item{prior}{Character, either \code{"auto"} (default) to estimate a robust
+empirical-Bayes prior for log(phi), or \code{"none"} for ordinary maximum
+likelihood.}
 
 \item{test}{Rhythmicity test: a covariance-aware joint Wald test of the sine
 and cosine coefficients (\code{"Wald"}, default), or a likelihood-ratio test

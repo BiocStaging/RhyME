@@ -22,9 +22,9 @@
 #' @param period Numeric, the oscillation period in hours (default 24 for
 #'   circadian rhythms). Can be set to other values for ultradian or
 #'   infradian rhythms.
-#' @param prior Character, either `"auto"` (default) to estimate a robust,
-#'   bootstrap-corrected empirical-Bayes prior for log(phi), or `"none"` for
-#'   ordinary maximum likelihood.
+#' @param prior Character, either `"auto"` (default) to estimate a robust
+#'   empirical-Bayes prior for log(phi), or `"none"` for ordinary maximum
+#'   likelihood.
 #' @param test Rhythmicity test: a covariance-aware joint Wald test of the sine
 #'   and cosine coefficients (`"Wald"`, default), or a likelihood-ratio test
 #'   (`"LRT"`).
@@ -76,8 +76,8 @@ fitCosinor <- function(se,
     }
 
     squeeze_bounds <- .RHYME_SQUEEZE_BOUNDS
-    # Keep the pilot and bootstrap passes quiet. A single progress bar is
-    # enabled immediately before the final genome-wide fit.
+    # Keep the pilot pass quiet. A single progress bar is enabled immediately
+    # before the final genome-wide fit.
     BPPARAM <- .setBPProgressBar(BPPARAM, FALSE)
 
     # A subject column is the single switch between fixed and mixed modes.
@@ -143,24 +143,11 @@ fitCosinor <- function(se,
             if (isTRUE(r$converged)) r$log_phi else NA_real_
         }, numeric(1))
 
-        raw_prior <- .estimateLogPhiPrior(pilot_log_phi_subset)
-        prior_spec <- .bootstrapPhiPrior(
-            pilot_results = pilot_results,
-            beta_pilot = beta_mat[pilot_idx, , drop = FALSE],
-            sample_df = sample_df,
-            X_cov = X_cov,
-            mode = mode,
-            raw_prior = raw_prior,
-            reps = .RHYME_BOOTSTRAP_REPS,
-            variance_floor = .RHYME_BOOTSTRAP_VARIANCE_FLOOR,
-            squeeze_bounds = squeeze_bounds,
-            BPPARAM = BPPARAM
-        )
+        prior_spec <- .estimateLogPhiPrior(pilot_log_phi_subset)
         if (verbose) {
             message(sprintf(
-                "RhyME prior: log(phi) mean=%.3f, sd=%.3f (bootstrap B=%d)",
-                prior_spec$mean, prior_spec$sd,
-                .RHYME_BOOTSTRAP_REPS
+                "RhyME prior: log(phi) mean=%.3f, sd=%.3f",
+                prior_spec$mean, prior_spec$sd
             ))
         }
     }

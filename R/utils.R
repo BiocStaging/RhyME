@@ -2,8 +2,6 @@
 
 .RHYME_MIN_PILOT_CPGS <- 1000L
 .RHYME_PILOT_N <- 10000L
-.RHYME_BOOTSTRAP_REPS <- 5L
-.RHYME_BOOTSTRAP_VARIANCE_FLOOR <- 0.01
 .RHYME_SQUEEZE_BOUNDS <- c(1e-4, 1 - 1e-4)
 
 .invlogit <- function(x) {
@@ -99,100 +97,6 @@
     list(
         mean = center,
         sd = robust_sd
-    )
-}
-
-#' Parametric-bootstrap correction for the log(phi) prior
-
-#' @noRd
-.bootstrapPhiPrior <- function(pilot_results, beta_pilot, sample_df, X_cov,
-                               mode,
-                               raw_prior, reps, variance_floor,
-                               squeeze_bounds, BPPARAM) {
-    X_full <- .makeDesignMatrices(sample_df, X_cov)$full
-    usable <- vapply(pilot_results, function(fit) {
-        isTRUE(fit$converged)
-    }, logical(1))
-
-    if (sum(usable) < .RHYME_MIN_PILOT_CPGS) {
-        stop(sprintf(
-            paste0("Automatic-prior bootstrap has only %d usable pilot ",
-                   "fits; at least %d are required."),
-            sum(usable), .RHYME_MIN_PILOT_CPGS
-        ), call. = FALSE)
-    }
-
-    fits <- pilot_results[usable]
-    beta_pilot <- as.matrix(beta_pilot[usable, , drop = FALSE])
-    n_fit <- length(fits)
-    n_sample <- ncol(beta_pilot)
-    common_phi <- exp(raw_prior$mean)
-
-    if (mode == "mixed") {
-        subject_index <- as.integer(factor(sample_df$subject))
-        n_subject <- max(subject_index)
-    }
-
-    center_biases <- numeric(reps)
-    noise_variances <- numeric(reps)
-    for (b in seq_len(reps)) {
-        pseudo_beta <- matrix(NA_real_, nrow = n_fit, ncol = n_sample)
-        for (j in seq_len(n_fit)) {
-            fit <- fits[[j]]
-            eta <- drop(X_full %*% fit$beta)
-            if (mode == "mixed") {
-                random_intercept <- stats::rnorm(
-                    n_subject, mean = 0, sd = fit$tau
-                )
-                eta <- eta + random_intercept[subject_index]
-            }
-
-            mu <- .squeezeValues(stats::plogis(eta), squeeze_bounds)
-            observed <- is.finite(beta_pilot[j, ])
-            pseudo_beta[j, observed] <- stats::rbeta(
-                sum(observed),
-                shape1 = mu[observed] * common_phi,
-                shape2 = (1 - mu[observed]) * common_phi
-            )
-        }
-
-        pseudo_results <- BiocParallel::bplapply(
-            seq_len(n_fit),
-            function(j) {
-                .fitOneCpG(
-                    cpg_id = paste0("bootstrap_", b, "_", j),
-                    y = pseudo_beta[j, ],
-                    df = sample_df,
-                    X_cov = X_cov,
-                    mode = mode,
-                    prior_phi = NULL,
-                    eps = squeeze_bounds[1],
-                    test = "none"
-                )
-            },
-            BPPARAM = BPPARAM
-        )
-
-        pseudo_log_phi <- vapply(
-            pseudo_results,
-            function(x) {
-                if (isTRUE(x$converged)) x$log_phi else NA_real_
-            },
-            numeric(1)
-        )
-        pseudo_prior <- .estimateLogPhiPrior(pseudo_log_phi)
-        center_biases[b] <- pseudo_prior$mean - raw_prior$mean
-        noise_variances[b] <- pseudo_prior$sd^2
-    }
-
-    center_bias <- mean(center_biases)
-    noise_variance <- mean(noise_variances)
-    corrected_variance <- max(raw_prior$sd^2 - noise_variance,
-                              variance_floor)
-
-    list(
-        mean = raw_prior$mean - center_bias,
-        sd = sqrt(corrected_variance)
     )
 }
 
