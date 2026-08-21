@@ -173,6 +173,18 @@ test_RhyME_fixed_tests <- function() {
     }
 }
 
+test_RhyME_eb_prior_estimator <- function() {
+    set.seed(20260821)
+    log_phi <- stats::rnorm(1000, mean = 6.2, sd = 0.5)
+    prior <- RhyME:::.estimateLogPhiPrior(log_phi)
+
+    checkEquals(prior$mean, stats::median(log_phi), tolerance = 1e-12)
+    checkEquals(prior$sd, stats::IQR(log_phi) / 1.349,
+                tolerance = 1e-12)
+    checkTrue(is.finite(prior$mean))
+    checkTrue(is.finite(prior$sd) && prior$sd > 0)
+}
+
 test_RhyME_covariate_adjustment <- function() {
     dat <- make_test_se(n_cpg = 12, n_subjects = 8, n_timepoints = 6,
                         n_rhythmic = 4, seed = 314)

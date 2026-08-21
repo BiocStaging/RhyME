@@ -115,11 +115,10 @@ empirical-Bayes prior on the log-precision parameter,
 \log(\phi_g) \sim \mathcal{N}(\mu_\phi, \sigma_\phi^2).
 \]
 
-With `prior = "auto"`, the prior parameters are estimated from a pilot subset
-of CpGs and corrected for finite-sample estimation variability using a
-parametric bootstrap. The estimated prior is then used to shrink noisy
-site-specific precision estimates toward the shared prior distribution.
-Setting `prior = "none"` disables precision shrinkage.
+With `prior = "auto"`, the prior center and scale are estimated robustly from a
+pilot subset of CpGs. The estimated prior is then used to shrink noisy
+site-specific precision estimates toward the shared prior distribution. Setting
+`prior = "none"` disables precision shrinkage.
 
 
 # Fixed-Effects Analysis
@@ -158,8 +157,8 @@ se_demo <- fitCosinor(se,
 
 ```
 
-For a genome-wide analysis, enable automatic prior estimation and its bootstrap
-correction with `prior = "auto"`.
+For a genome-wide analysis, enable automatic prior estimation with
+`prior = "auto"`.
 
 ```{r genome-wide-auto-prior, eval=FALSE}
 fit_auto <- fitCosinor(
