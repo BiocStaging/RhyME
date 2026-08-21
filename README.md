@@ -59,7 +59,7 @@ default. If `subject_col = NULL`, it uses a fixed-effects model. Optional
 adjustment terms.
 
 By default, rhythmicity is tested with a joint Wald test of
-the sine and cosine coefficients. 
+the sine and cosine coefficients.
 
 ```r
 set.seed(1)
@@ -114,3 +114,9 @@ fit <- fitCosinor(
 - `fitCosinor()` fits circadian beta-regression models across CpG sites.
 - `topCpGs()` returns top CpGs ranked by statistical significance.
 - `plotCosinorFit()` plots raw beta values and fitted cosinor curves.
+
+## Documentation and notebooks
+
+- [Package vignette](vignettes/RHyME_vignette.Rmd)
+- [Quick-start notebook](notebooks/RhyME_quickstart.ipynb)
+- [Bioconductor build and check notebook](notebooks/RhyME_run_Bioconductor_tests.ipynb)
