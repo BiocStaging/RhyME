@@ -115,8 +115,6 @@ fit <- fitCosinor(
 - `topCpGs()` returns top CpGs ranked by statistical significance.
 - `plotCosinorFit()` plots raw beta values and fitted cosinor curves.
 
-## Documentation and notebooks
+## Documentation
 
 - [Package vignette](vignettes/RHyME_vignette.Rmd)
-- [Quick-start notebook](notebooks/RhyME_quickstart.ipynb)
-- [Bioconductor build and check notebook](notebooks/RhyME_run_Bioconductor_tests.ipynb)
