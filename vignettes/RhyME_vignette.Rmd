@@ -158,9 +158,8 @@ se_demo <- fitCosinor(se,
 
 ```
 
-The evaluated example disables empirical-Bayes shrinkage to keep package builds
-fast. For a genome-wide analysis, enable automatic prior estimation and its
-bootstrap correction with `prior = "auto"`.
+For a genome-wide analysis, enable automatic prior estimation and its bootstrap
+correction with `prior = "auto"`.
 
 ```{r genome-wide-auto-prior, eval=FALSE}
 fit_auto <- fitCosinor(
