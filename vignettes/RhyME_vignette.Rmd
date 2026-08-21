@@ -92,9 +92,8 @@ It is omitted when fitting the fixed-effects model. By default, the period
 \(P\) is 24 hours. Optional covariates \(\mathbf{x}_{ij}\), such as sex or
 age, are included in both the rhythmic and null models as adjustment terms.
 By default, rhythmicity is assessed using a joint Wald test of
-\(H_0:\beta_{cg}=\beta_{sg}=0\). A likelihood-ratio test can instead be
-requested using `test = "LRT"`. In either case, the test concerns only the
-sine and cosine coefficients rather than the adjustment covariates.
+\(H_0:\beta_{cg}=\beta_{sg}=0\). The test concerns only the sine and cosine
+coefficients rather than the adjustment covariates.
 
 # Empirical-Bayes Precision Shrinkage
 
