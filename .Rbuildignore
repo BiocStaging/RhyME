@@ -4,3 +4,4 @@
 ^\.RData$
 ^src/.*\.(dll|so|o)$
 ^inst/logo$
+^\.DS_Store$

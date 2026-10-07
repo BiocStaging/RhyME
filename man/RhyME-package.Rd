@@ -4,11 +4,21 @@
 \name{RhyME-package}
 \alias{RhyME}
 \alias{RhyME-package}
-\title{RhyME: Beta Regression Cosinor Models for Circadian Methylation Analysis}
+\title{PQL Cosinor Estimation and Rhythmicity Testing}
 \description{
-\if{html}{\figure{logo.png}{options: style='float: right' alt='logo' width='120'}}
-
-Fits cosinor-based beta regression models for detecting circadian rhythmicity in DNA methylation array data using Template Model Builder (TMB) for efficient likelihood optimization. Supports fixed-effects (cross-sectional) and mixed-effects (repeated measures) designs with configurable period and adjustment covariates. Implements empirical Bayes shrinkage of the beta distribution precision parameter across CpG sites, analogous to limma's moderated variance, to improve genome-wide inference. Provides amplitude, phase, and MESOR estimation on both logit-link and response scales.
+Fits beta-regression cosinor models with optional subject random
+intercepts using penalized quasi-likelihood (PQL), an optional empirical
+Bayes (EB) prior on log precision, and a null-model score test for
+rhythmicity.
+}
+\details{
+Input and output are \code{SummarizedExperiment} objects. The fixed
+effects are an intercept, optional adjustment covariates, and sine/cosine
+terms. Omitting \code{subject_col} fits a fixed-effects-only model for
+independent samples.
+}
+\seealso{
+\code{\link[=fitCosinor]{fitCosinor()}}, \code{\link[=plotCosinorFit]{plotCosinorFit()}}
 }
 \author{
 \strong{Maintainer}: Yixiang Hong \email{yixiang.hong@uth.tmc.edu}

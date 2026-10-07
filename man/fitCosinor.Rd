@@ -2,7 +2,7 @@
 % Please edit documentation in R/fitCosinor.R
 \name{fitCosinor}
 \alias{fitCosinor}
-\title{Fit RhyME across CpG sites}
+\title{Fit Cosinor Models Across CpG Sites}
 \usage{
 fitCosinor(
   se,
@@ -11,74 +11,69 @@ fitCosinor(
   assay_name = NULL,
   period = 24,
   prior = c("auto", "none"),
-  test = c("Wald", "LRT"),
   BPPARAM = BiocParallel::MulticoreParam(),
   verbose = TRUE,
   covariates = NULL
 )
 }
 \arguments{
-\item{se}{A \link[SummarizedExperiment:SummarizedExperiment]{SummarizedExperiment::SummarizedExperiment} object. The
-specified assay should contain methylation beta values in [0, 1]. Values
-exactly at the boundaries are moved slightly inward for beta regression.}
+\item{se}{A \code{SummarizedExperiment} with CpGs in rows and samples in
+columns. The assay contains numeric beta values in \eqn{[0,1]}, with
+missing values allowed.}
 
-\item{time_col}{Character, column name in \code{colData(se)} containing
-collection times in hours (default \code{"time"}).}
+\item{time_col}{Name of the collection-time column in \code{colData(se)},
+in hours.}
 
-\item{subject_col}{Character or NULL. Column name in \code{colData(se)} for
-subject identifiers. If non-NULL, random intercepts per subject are
-included (mixed-effects mode). If NULL, fixed-effects mode is used.}
+\item{subject_col}{Name of the subject column for a random-intercept
+model, or \code{NULL} for a fixed-effects model of independent samples.}
 
-\item{covariates}{Character vector or NULL. Optional \code{colData(se)} columns
-included as adjustment covariates in both the rhythmic and null models.
-Covariate coefficients are treated as nuisance parameters and are not
-tested or returned.}
+\item{assay_name}{Assay name, or \code{NULL} to use the first assay.}
 
-\item{assay_name}{Character or NULL, name of the assay to use. The default
-NULL uses the first assay in \code{se}.}
+\item{period}{Oscillation period in hours. Default is 24.}
 
-\item{period}{Numeric, the oscillation period in hours (default 24 for
-circadian rhythms). Can be set to other values for ultradian or
-infradian rhythms.}
+\item{prior}{\code{"auto"} estimates an EB prior; \code{"none"} uses no prior.
+A named list with \code{mean} and positive \code{sd} supplies a normal prior on
+log precision. EB estimation requires at least 1,000 usable pilot fits.}
 
-\item{prior}{Character, either \code{"auto"} (default) to estimate a robust
-empirical-Bayes prior for log(phi), or \code{"none"} for ordinary maximum
-likelihood.}
+\item{BPPARAM}{A \code{BiocParallelParam} object. Default is
+\code{BiocParallel::MulticoreParam()} (serial on Windows).}
 
-\item{test}{Rhythmicity test: a covariance-aware joint Wald test of the sine
-and cosine coefficients (\code{"Wald"}, default), or a likelihood-ratio test
-(\code{"LRT"}).}
+\item{verbose}{Whether to print fitting progress.}
 
-\item{BPPARAM}{A \link[BiocParallel:BiocParallelParam]{BiocParallel::BiocParallelParam} object for execution.
-Defaults to \code{\link[BiocParallel:MulticoreParam]{BiocParallel::MulticoreParam()}} for parallel fitting on
-Unix-like systems. Pass \code{\link[BiocParallel:SerialParam]{BiocParallel::SerialParam()}} for serial fitting or
-\code{\link[BiocParallel:SnowParam]{BiocParallel::SnowParam()}} for socket-based parallelism.}
-
-\item{verbose}{Logical, print messages and show supported progress bars.}
+\item{covariates}{Names of numeric or categorical \code{colData(se)} columns
+for adjustment. Covariate coefficients are not returned.}
 }
 \value{
-The input \code{SummarizedExperiment} with per-CpG results appended to
-\code{rowData(se)} and design info, EB prior, test settings, and fit summary
-stored in \code{metadata(se)$RhyME}.
+The input \code{SummarizedExperiment} with these \code{rowData(se)} columns:
+\itemize{
+\item \code{b0}, \code{b_sin}, \code{b_cos}: logit-scale intercept and sine/cosine coefficients.
+\item \code{log_phi}, \code{tau}: log precision and random-intercept SD.
+\item \code{score_chisq}, \code{pvalue}, \code{padj}: score statistic, p-value, and
+BH-adjusted p-value across all input CpGs.
+\item \code{logit_amplitude}, \code{amplitude}: logit-scale amplitude and half the
+marginal mean curve's peak-to-trough difference on the methylation scale.
+\item \code{phase}, \code{mesor}: peak time in hours in \eqn{[0,\mathrm{period})} and
+the marginal mean curve averaged over one period.
+\item \code{converged}: whether both null and full fits converged.
 }
-\details{
-When \code{covariates} are supplied, their centered design columns are
-included in both the full and null models. Consequently, the reported
-p-value still tests only the joint sine/cosine rhythmicity effect, while
-response-scale summaries describe the mean covariate profile.
+
+Unusable null fits have \code{NA} p-values; unusable full fits have \code{NA}
+parameter estimates. Usable results from either fit are retained.
+Phase is undefined at zero amplitude. Existing row annotations are retained.
+\code{metadata(se)$RhyME} stores \code{design}, \code{ebPrior}, and \code{fitSummary}.
 }
 \description{
-Fits a RhyME to each CpG site in a methylation array
-dataset. Supports both fixed-effects (cross-sectional) and mixed-effects
-(repeated measures with random intercepts) designs, and optionally
-applies empirical Bayes shrinkage to the precision parameter (phi).
+Fits beta cosinor models using PQL, with optional random intercepts,
+adjustment covariates, and an empirical Bayes (EB) prior on log precision.
+A null-model score test assesses rhythmicity; a full model estimates
+rhythm parameters.
 }
 \examples{
-ex <- readRDS(system.file("extdata", "example_data.rds",
-                         package = "RhyME"))
-se <- ex$se[seq_len(5), ]
-
-fit <- fitCosinor(se, time_col = "time", subject_col = "subject",
-                  prior = "none", verbose = FALSE)
-head(SummarizedExperiment::rowData(fit))
+ex <- readRDS(system.file("extdata", "example_data.rds", package = "RhyME"))
+fit <- fitCosinor(ex$se[seq_len(5), ], subject_col = "subject",
+    prior = "none", verbose = FALSE)
+head(SummarizedExperiment::rowData(fit), 3)
+}
+\seealso{
+\code{\link[=plotCosinorFit]{plotCosinorFit()}}
 }

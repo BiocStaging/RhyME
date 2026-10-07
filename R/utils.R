@@ -1,45 +1,59 @@
-# Internal utility functions
-
-.RHYME_MIN_PILOT_CPGS <- 1000L
-.RHYME_PILOT_N <- 10000L
-.RHYME_SQUEEZE_BOUNDS <- c(1e-4, 1 - 1e-4)
-
-.invlogit <- function(x) {
-    1 / (1 + exp(-x))
+.getRhyMEInput <- function(se, assay_name, time_col, subject_col = NULL,
+                           covariates = NULL) {
+    if (!inherits(se, "SummarizedExperiment"))
+        stop("'se' must be a SummarizedExperiment.", call. = FALSE)
+    if (!nrow(se) || !ncol(se) || is.null(rownames(se)) ||
+        anyNA(rownames(se)) || any(!nzchar(rownames(se))) ||
+        anyDuplicated(rownames(se)))
+        stop("Input needs at least one CpG and sample, with unique CpG names.",
+             call. = FALSE)
+    for (name in list(time_col, subject_col, assay_name)) {
+        if (!is.null(name) && (!is.character(name) || length(name) != 1L ||
+                              is.na(name) || !nzchar(name)))
+            stop("Column and assay names must be single nonempty strings.",
+                 call. = FALSE)
+    }
+    if (is.null(time_col)) stop("'time_col' is required.", call. = FALSE)
+    cd <- as.data.frame(colData(se))
+    missing <- setdiff(c(time_col, subject_col, covariates), names(cd))
+    if (length(missing))
+        stop("Missing colData columns: ", paste(missing, collapse = ", "),
+             call. = FALSE)
+    if (!is.numeric(cd[[time_col]]))
+        stop("Collection times must be numeric hours.", call. = FALSE)
+    if (!is.null(subject_col)) {
+        ids <- cd[[subject_col]]
+        if (anyNA(ids) || any(!nzchar(as.character(ids))) ||
+            (is.numeric(ids) && any(!is.finite(ids))))
+            stop("Subject identifiers must be complete and finite.", call. = FALSE)
+    }
+    if (is.null(assay_name)) {
+        beta <- assay(se, 1L)
+        available <- assayNames(se)
+        if (length(available) && !is.na(available[1]) && nzchar(available[1]))
+            assay_name <- available[1]
+    } else {
+        beta <- assay(se, assay_name)
+    }
+    if (!is.matrix(beta) || !is.numeric(beta))
+        stop("The assay must be a numeric matrix.", call. = FALSE)
+    if (any(beta < 0 | beta > 1, na.rm = TRUE))
+        stop("Observed beta values must be within [0, 1]; missing values may be NA.",
+             call. = FALSE)
+    keep <- is.finite(cd[[time_col]])
+    list(beta = beta[, keep, drop = FALSE], col_data = cd[keep, , drop = FALSE],
+         assay_name = assay_name)
 }
 
-#' Build cosinor terms from a time vector
-#'
-#' @param time Numeric vector of collection times (in hours).
-#' @param period Numeric scalar, the period in hours (default 24).
-#' @return A data.frame with columns `sin_term` and `cos_term`.
-#' @noRd
-.makeCosinorTerms <- function(time, period = 24) {
-    omega <- 2 * pi / period
-    data.frame(
-        sin_term = sin(omega * time),
-        cos_term = cos(omega * time)
-    )
-}
-
-#' Construct a fixed-effect matrix for adjustment covariates
-#' @noRd
 .makeCovariateMatrix <- function(col_data, covariates = NULL) {
-    if (is.null(covariates) || !length(covariates)) {
+    if (!length(covariates))
         return(matrix(numeric(), nrow = nrow(col_data), ncol = 0L))
-    }
     if (!is.character(covariates) || anyNA(covariates) ||
-        any(!nzchar(covariates)) || anyDuplicated(covariates)) {
-        stop("'covariates' must contain unique colData column names.",
-             call. = FALSE)
-    }
-
+        any(!nzchar(covariates)) || anyDuplicated(covariates))
+        stop("'covariates' must contain unique colData column names.", call. = FALSE)
     cov_data <- col_data[, covariates, drop = FALSE]
-    if (any(!stats::complete.cases(cov_data))) {
-        stop("Adjustment covariates cannot contain missing values.",
-             call. = FALSE)
-    }
-
+    if (any(!stats::complete.cases(cov_data)))
+        stop("Adjustment covariates cannot contain missing values.", call. = FALSE)
     X <- stats::model.matrix(~ ., data = cov_data)
     X <- X[, colnames(X) != "(Intercept)", drop = FALSE]
     X <- sweep(X, 2L, colMeans(X), FUN = "-")
@@ -47,124 +61,43 @@
     X
 }
 
-#' Construct full and null model matrices
-#' @noRd
-.makeDesignMatrices <- function(sample_df, X_cov = NULL) {
-    if (is.null(X_cov)) {
-        X_cov <- matrix(numeric(), nrow = nrow(sample_df), ncol = 0L)
+.checkPQLDesign <- function(X, subject = NULL) {
+    if (nrow(X) <= ncol(X) || qr(X)$rank != ncol(X))
+        stop("A full-rank design and more observations than fixed-effect coefficients are required.")
+    if (!is.null(subject)) {
+        counts <- table(subject)
+        if (length(counts) < 2L || !any(counts > 1L))
+            stop("Mixed PQL requires multiple subjects with repeated observations.")
     }
-    base <- cbind(
-        `(Intercept)` = rep(1, nrow(sample_df)),
-        X_cov
-    )
-    list(
-        full = cbind(
-            base,
-            sin_term = sample_df$sin_term,
-            cos_term = sample_df$cos_term
-        ),
-        null = base
-    )
+    invisible(NULL)
 }
 
-#' Estimate an empirical-Bayes prior for beta precision
-#'
-#' Estimates a Normal prior on log(phi) from per-CpG pilot estimates. The
-#' center is the median and the scale is IQR / 1.349, making the estimate less
-#' sensitive to unstable per-CpG precision fits. The prior is used in the
-#' second-pass TMB fit to shrink CpG-specific precision estimates toward the
-#' genome-wide distribution.
-#'
-#' @param log_phi_hat Numeric vector of per-CpG log(phi) estimates from the
-#'   pilot fit.
-#' @return A list containing `mean` and `sd`.
-#' @noRd
-.estimateLogPhiPrior <- function(log_phi_hat) {
-    valid <- log_phi_hat[is.finite(log_phi_hat)]
-    n_ok <- length(valid)
-
-    if (n_ok < .RHYME_MIN_PILOT_CPGS) {
-        stop(sprintf(
-            paste0("Automatic prior requires at least %d finite log(phi) ",
-                   "estimates; got %d."),
-            .RHYME_MIN_PILOT_CPGS, n_ok
-        ), call. = FALSE)
-    }
-
-    center <- stats::median(valid)
-    robust_sd <- stats::IQR(valid) / 1.349
-
-    list(
-        mean = center,
-        sd = robust_sd
-    )
-}
-
-#' Squeeze beta values away from 0 and 1
-#'
-#' @param x Numeric vector of beta values.
-#' @param bounds Length-2 numeric vector with lower and upper bounds.
-#' @return Numeric vector with values clamped to `(bounds[1], bounds[2])`.
-#' @noRd
-.squeezeValues <- function(x, bounds = c(1e-5, 1 - 1e-5)) {
-    pmin(pmax(x, bounds[1]), bounds[2])
-}
-
-#' Extract the assay and sample metadata used by RhyME
-#' @noRd
-.getRhyMEInput <- function(se, assay_name, time_col, subject_col = NULL,
-                           covariates = NULL) {
-    if (!inherits(se, "SummarizedExperiment")) {
-        stop("'se' must be a SummarizedExperiment object.", call. = FALSE)
-    }
-
-    cd <- as.data.frame(colData(se))
-    missing_cols <- setdiff(c(time_col, subject_col, covariates), names(cd))
-    if (length(missing_cols)) {
-        stop(sprintf("Missing colData column(s): %s.",
-                     paste(missing_cols, collapse = ", ")), call. = FALSE)
-    }
-    if (!is.numeric(cd[[time_col]])) {
-        stop(sprintf("Column '%s' in colData must be numeric (hours).",
-                     time_col), call. = FALSE)
-    }
-    if (!is.null(subject_col)) {
-        subject <- cd[[subject_col]]
-        invalid_subject <- anyNA(subject) ||
-            (is.numeric(subject) && any(!is.finite(subject))) ||
-            any(!nzchar(as.character(subject)))
-        if (invalid_subject) {
-            stop(sprintf(
-                "Column '%s' in colData contains missing or invalid subjects.",
-                subject_col
-            ), call. = FALSE)
-        }
-    }
-
-    if (is.null(assay_name)) {
-        beta <- assay(se, 1L)
-        available <- assayNames(se)
-        assay_name <- if (length(available) && !is.na(available[1]) &&
-                          nzchar(available[1])) available[1] else NULL
-    } else {
-        beta <- assay(se, assay_name)
-    }
-
-    # Samples without an observed collection time cannot contribute to the
-    # cosinor design and are omitted from the fit.
-    keep_samples <- is.finite(cd[[time_col]])
-    beta <- beta[, keep_samples, drop = FALSE]
-    cd <- cd[keep_samples, , drop = FALSE]
-
-    if (!is.numeric(beta)) {
-        stop("The fitted assay must contain numeric beta values.",
+.validatePQLPrior <- function(prior) {
+    if (!is.numeric(prior$mean) || !is.numeric(prior$sd) ||
+        length(prior$mean) != 1L || length(prior$sd) != 1L ||
+        !is.finite(prior$mean) || !is.finite(prior$sd) || prior$sd <= 0)
+        stop("A supplied prior must have a finite mean and positive finite sd on log(phi).",
              call. = FALSE)
-    }
-    if (any(is.infinite(beta), na.rm = TRUE) ||
-        any(beta < 0 | beta > 1, na.rm = TRUE)) {
-        stop("Observed beta values must be finite and within [0, 1].",
-             call. = FALSE)
-    }
+    invisible(NULL)
+}
 
-    list(beta = beta, col_data = cd, assay_name = assay_name)
+.pqlBatches <- function(beta, workers) {
+    if (workers == 1L) return(list(beta))
+    index <- seq_len(nrow(beta))
+    groups <- split(index, ceiling(index / ceiling(nrow(beta) / workers)))
+    unname(lapply(groups, function(i) beta[i, , drop = FALSE]))
+}
+
+.pqlPilotIndex <- function(n) {
+    if (n <= 10000L) return(seq_len(n))
+    withr::with_seed(42, sort(sample.int(n, 10000L)))
+}
+
+.estimateLogPhiPrior <- function(log_phi) {
+    valid <- log_phi[is.finite(log_phi)]
+    if (length(valid) < 1000L)
+        stop("EB prior estimation requires at least 1,000 usable null pilot fits.",
+             call. = FALSE)
+    list(mean = unname(stats::median(valid)),
+         sd = max(unname(stats::IQR(valid)) / 1.349, 1e-3), n = length(valid))
 }

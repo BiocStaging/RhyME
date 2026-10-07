@@ -1,42 +1,39 @@
 Package: RhyME
 Title: Beta Regression Cosinor Models for Circadian Methylation Analysis
-Version: 0.99.0
-Authors@R: person("Yixiang", "Hong",
-    email = "yixiang.hong@uth.tmc.edu", role = c("aut", "cre"))
-Description: Fits cosinor-based beta regression models for detecting circadian
-    rhythmicity in DNA methylation array data using Template Model Builder
-    (TMB) for efficient likelihood optimization. Supports fixed-effects
-    (cross-sectional) and mixed-effects (repeated measures) designs with
-    configurable period and adjustment covariates. Implements empirical Bayes
-    shrinkage of the beta distribution precision parameter across CpG sites,
-    analogous to limma's
-    moderated variance, to improve genome-wide inference. Provides amplitude,
-    phase, and MESOR estimation on both logit-link and response scales.
-License: GPL (>= 3) + file LICENSE
+Version: 0.99.1
+Authors@R: person("Yixiang", "Hong", email = "yixiang.hong@uth.tmc.edu",
+    role = c("aut", "cre"))
+Description: Fits beta cosinor models to methylation measurements
+    using penalized quasi-likelihood (PQL), an optional subject random intercept,
+    adjustment covariates, and an optional empirical Bayes (EB) prior on log precision. Tests
+    rhythmicity with a null-model score test and estimates rhythm
+    parameters from a separate full-model fit.
+License: GPL (>= 3)
 URL: https://github.com/njuelsdke/RhyME
 BugReports: https://github.com/njuelsdke/RhyME/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-biocViews: Epigenetics, DNAMethylation, TimeCourse, Regression,
-    DifferentialMethylation, Software
-Depends: R (>= 4.3.0)
+biocViews: Epigenetics, DNAMethylation, MethylationArray, TimeCourse,
+    Regression, DifferentialMethylation
+Depends: R (>= 4.6.0)
 Imports:
+    Rcpp,
     SummarizedExperiment,
     S4Vectors,
     BiocParallel,
-    TMB,
     stats,
-    ggplot2
+    ggplot2,
+    withr
 LinkingTo:
-    TMB,
-    RcppEigen
+    Rcpp,
+    RcppEigen,
+    BH
 Suggests:
     knitr,
     rmarkdown,
     BiocStyle,
     BiocGenerics,
-    RUnit,
-    limma,
-    cowplot
+    RUnit
 VignetteBuilder: knitr
-Config/roxygen2/version: 8.0.0
+SystemRequirements: C++17
+Config/roxygen2/version: 8.1.0

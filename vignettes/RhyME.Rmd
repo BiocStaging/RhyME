@@ -1,0 +1,185 @@
+---
+title: "Using RhyME for circadian methylation analysis"
+output:
+  BiocStyle::html_document:
+    toc: true
+    toc_depth: 2
+vignette: >
+  %\VignetteIndexEntry{Using RhyME for circadian methylation analysis}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE,
+    fig.crop = FALSE)
+```
+
+# Introduction
+
+RhyME is an R package for detecting circadian rhythms in DNA methylation
+data. It fits beta-regression cosinor models to methylation beta values. The package supports independent samples and
+repeated measurements from the same subjects, with optional covariates
+such as age and sex. An empirical Bayes (EB) prior can improve the
+stability of precision estimates across CpGs.
+
+RhyME identifies rhythmic CpG sites and estimates their amplitude, peak
+time, and mean methylation level. This vignette walks through installation,
+data preparation, model fitting, viewing results, and plotting fitted curves.
+
+# Installation
+
+Install the package:
+
+```{r install, eval=FALSE}
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+    install.packages("BiocManager")
+}
+
+BiocManager::install("https://github.com/njuelsdke/RhyME")
+```
+
+
+# Load data
+
+The bundled example contains 10,000 simulated CpGs from eight subjects,
+each sampled six times.
+
+```{r data}
+library(RhyME)
+library(SummarizedExperiment)
+library(BiocParallel)
+
+example <- readRDS(system.file("extdata", "example_data.rds",
+    package = "RhyME"))
+se <- example$se
+dim(se)
+head(as.data.frame(colData(se)))
+```
+
+## Prepare your own data
+
+Use a numeric matrix of beta values, with CpGs in rows and
+samples in columns. Sample metadata should contain collection time in hours
+and, for repeated measurements, a subject identifier. CpG and sample names
+should be unique, sample names must match between the matrix and metadata.
+
+For example, read two CSV files whose first columns contain row names:
+
+```{r own-data, eval=FALSE}
+beta <- as.matrix(read.csv("beta_values.csv", row.names = 1,
+    check.names = FALSE))
+sample_info <- read.csv("sample_metadata.csv", row.names = 1)
+sample_info <- sample_info[colnames(beta), , drop = FALSE]
+
+se <- SummarizedExperiment(
+    assays = list(beta = beta),
+    colData = DataFrame(sample_info))
+```
+
+Missing observations are allowed. Time, subject identifiers, and any
+adjustment covariates should be complete.
+
+# Fit the model
+
+For repeated measurements, specify the time and subject columns. This
+example fits all 10,000 CpGs with the EB prior:
+
+```{r fit}
+fit <- fitCosinor(se,
+    time_col = "time", subject_col = "subject", assay_name = "beta",
+    period = 24, prior = "auto",
+    BPPARAM = SerialParam())
+```
+
+Set `period` to the rhythm length in hours; the default is 24. Sampling
+times can be irregular or span several days. `prior = "auto"` estimates
+an EB prior from the data and needs at least 1,000 usable CpGs. Use
+`prior = "none"` for smaller datasets.
+
+# View results
+
+Results are stored in `rowData(fit)`. Sort by p-value to view the top CpGs:
+
+```{r results}
+result <- as.data.frame(rowData(fit))
+result <- result[order(result$pvalue, na.last = NA), , drop = FALSE]
+head(result[, c("amplitude", "phase", "mesor", "pvalue", "padj",
+    "converged")], 10)
+```
+
+The beta value scale rhythm summaries below are population-averaged quantities, obtained by marginalizing over the fitted random-intercept distribution.
+
+- `amplitude`: half the fitted peak-to-trough difference on the beta-value scale.
+- `phase`: peak time in hours, between 0 and `period`, relative to the input time origin.
+- `mesor`: fitted mean methylation level averaged over one period.
+
+
+
+Select CpGs at a 5% false discovery rate:
+
+```{r significant}
+significant <- result[result$padj < 0.05, , drop = FALSE]
+nrow(significant)
+```
+
+View the fitting summary and estimated EB prior:
+
+```{r summary}
+metadata(fit)$RhyME$fitSummary
+metadata(fit)$RhyME$ebPrior
+```
+
+# Plot fitted curves
+
+By default, `plotCosinorFit()` shows up to six CpGs with usable estimates,
+ordered by p-value. Points are observed beta values and the red line is the
+fitted mean curve.
+
+```{r plot, fig.width=8, fig.height=5}
+plotCosinorFit(fit)
+```
+
+Select CpGs by name and set the number of panels per row:
+
+```{r selected-plot, eval=FALSE}
+plotCosinorFit(fit, cpgs = rownames(result)[1:3], ncol = 3)
+```
+
+
+# Other options
+
+## Adjust for covariates
+
+Add covariates to `colData(se)` and pass their column names. Numeric and
+categorical variables are supported. Here we add example subject ages and
+fit a small subset:
+
+```{r covariates}
+colData(se)$age <- rep(c(28, 42, 35, 51, 39, 47, 31, 55), each = 6)
+adjusted <- fitCosinor(se[seq_len(50), ],
+    time_col = "time", subject_col = "subject", covariates = "age",
+    prior = "none", BPPARAM = SerialParam(), verbose = FALSE)
+```
+
+For multiple covariates, use `covariates = c("age", "sex")` when both
+columns are present. Do not include the subject identifier as a covariate.
+
+
+## Independent samples
+
+For an object `se_independent` containing independent samples, omit
+`subject_col` to use the fixed-effects model:
+
+```{r fixed, eval=FALSE}
+fit_fixed <- fitCosinor(se_independent,
+    time_col = "time", assay_name = "beta", period = 24,
+    prior = "none", BPPARAM = SerialParam())
+```
+
+
+# Session information
+
+```{r session, echo=FALSE}
+sessionInfo()
+```

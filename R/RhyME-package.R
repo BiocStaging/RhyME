@@ -1,11 +1,21 @@
+#' PQL Cosinor Estimation and Rhythmicity Testing
+#'
+#' Fits beta-regression cosinor models with optional subject random
+#' intercepts using penalized quasi-likelihood (PQL), an optional empirical
+#' Bayes (EB) prior on log precision, and a null-model score test for
+#' rhythmicity.
+#'
+#' @details Input and output are `SummarizedExperiment` objects. The fixed
+#' effects are an intercept, optional adjustment covariates, and sine/cosine
+#' terms. Omitting `subject_col` fits a fixed-effects-only model for
+#' independent samples.
+#'
+#' @seealso [fitCosinor()], [plotCosinorFit()]
+#'
 #' @keywords internal
-"_PACKAGE"
-
-#' @importFrom stats sd pchisq p.adjust plogis rbeta rnorm runif var qlogis nlminb optimHess
-#' @importFrom S4Vectors DataFrame metadata metadata<-
-#' @importFrom SummarizedExperiment assay assayNames colData rowData rowData<-
-#' @importFrom BiocParallel bplapply MulticoreParam SerialParam
-#' @importFrom TMB MakeADFun
-#' @importFrom ggplot2 ggplot aes geom_point geom_line facet_wrap labs theme_bw .data
 #' @useDynLib RhyME, .registration = TRUE
-NULL
+#' @importFrom Rcpp evalCpp
+#' @importFrom SummarizedExperiment assay assayNames colData rowData rowData<-
+#' @importFrom S4Vectors DataFrame metadata metadata<-
+#' @importFrom ggplot2 .data
+"_PACKAGE"

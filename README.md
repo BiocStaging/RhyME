@@ -13,7 +13,8 @@
 
 `RhyME` is an R package for detecting circadian rhythmicity in
 DNA methylation beta values. The package fits per-CpG beta-regression cosinor
-models with sine and cosine terms for cyclic time effects.
+models with sine and cosine terms for cyclic time effects, using penalized
+quasi-likelihood (PQL).
 
 The package supports fixed-effect designs and repeated-measures designs with a
 subject-level random intercept. It also provides empirical Bayes shrinkage of
@@ -33,7 +34,7 @@ BiocManager::install("RhyME")
 Install the development version from GitHub with:
 
 ```r
-remotes::install_github("njuelsdke/RhyME")
+BiocManager::install("njuelsdke/RhyME")
 ```
 
 ## Usage
@@ -45,11 +46,16 @@ assay and sample-level collection time in `colData()`.
 library(RhyME)
 library(SummarizedExperiment)
 
+example <- readRDS(system.file("extdata", "example_data.rds", package = "RhyME"))
+se <- example$se
+
 fit <- fitCosinor(
     se,
     time_col = "time",
     subject_col = "subject",
-    covariates = c("sex", "age")
+    assay_name = "beta",
+    period = 24,
+    prior = "auto"
 )
 ```
 
@@ -58,36 +64,53 @@ default. If `subject_col = NULL`, it uses a fixed-effects model. Optional
 `covariates` are included in both the rhythmic and null models as nuisance
 adjustment terms.
 
-By default, rhythmicity is tested with a joint Wald test of
-the sine and cosine coefficients.
+Rhythmicity is tested with a joint null-model score test of the sine and
+cosine effects. A separate full model estimates rhythm parameters.
+The default `prior = "auto"` estimates an EB prior and needs at least 1,000
+usable CpGs; use `prior = "none"` for smaller datasets.
+
+To adjust for covariates, add their columns to `colData(se)` and specify
+their names, for example:
 
 ```r
-set.seed(1)
-fit <- fitCosinor(
+fit_adjusted <- fitCosinor(
     se,
     time_col = "time",
     subject_col = "subject",
-    prior = "auto",
-    test = "Wald"
+    covariates = c("sex", "age")
 )
 ```
 
-Top rhythmic CpGs can be extracted with:
+Results, including amplitude, phase, MESOR, p-values, and convergence, are
+stored in `rowData(fit)`. View the top CpGs by sorting the table:
 
 ```r
-topCpGs(fit, n = 10)
+result <- as.data.frame(rowData(fit))
+result <- result[order(result$pvalue, na.last = NA), , drop = FALSE]
+head(result, 10)
 ```
 
 Fitted curves can be visualized with:
 
 ```r
-plotCosinorFit(fit, cpgs = topCpGs(fit, n = 3)$cpg)
+plotCosinorFit(fit)
 ```
 
 ## Parallel Fitting
 
 By default, `fitCosinor()` uses `BiocParallel::MulticoreParam()` for parallel
-fitting on Linux systems. For controlled serial fitting:
+fitting on Linux and macOS. To use eight workers:
+
+```r
+fit <- fitCosinor(
+    se,
+    time_col = "time",
+    subject_col = "subject",
+    BPPARAM = BiocParallel::MulticoreParam(workers = 8)
+)
+```
+
+For controlled serial fitting:
 
 ```r
 fit <- fitCosinor(
@@ -98,7 +121,7 @@ fit <- fitCosinor(
 )
 ```
 
-For socket-based parallel fitting:
+For socket-based parallel fitting, including Windows:
 
 ```r
 fit <- fitCosinor(
@@ -111,10 +134,10 @@ fit <- fitCosinor(
 
 ## Main Functions
 
-- `fitCosinor()` fits circadian beta-regression models across CpG sites.
-- `topCpGs()` returns top CpGs ranked by statistical significance.
+- `fitCosinor()` fits PQL beta-regression cosinor models, tests rhythmicity,
+  and returns parameter estimates and rhythm summaries in `rowData()`.
 - `plotCosinorFit()` plots raw beta values and fitted cosinor curves.
 
 ## Documentation
 
-- [Package vignette](vignettes/RHyME_vignette.Rmd)
+- [Package vignette](vignettes/RhyME.Rmd)

@@ -2,45 +2,32 @@
 % Please edit documentation in R/plotMethods.R
 \name{plotCosinorFit}
 \alias{plotCosinorFit}
-\title{Plot fitted cosinor curves for selected CpGs}
+\title{Plot Fitted Cosinor Curves}
 \usage{
-plotCosinorFit(
-  se,
-  cpgs = NULL,
-  assay_name = NULL,
-  time_col = NULL,
-  ncol = 3,
-  n_grid = 200
-)
+plotCosinorFit(se, cpgs = NULL, ncol = 3)
 }
 \arguments{
-\item{se}{A \link[SummarizedExperiment:SummarizedExperiment]{SummarizedExperiment::SummarizedExperiment} object
-returned by \code{\link[=fitCosinor]{fitCosinor()}}.}
+\item{se}{A \code{SummarizedExperiment} returned by \code{fitCosinor()}.}
 
-\item{cpgs}{Character vector of CpG identifiers to plot. If NULL, the top
-6 CpGs by p-value are plotted.}
+\item{cpgs}{CpG identifiers in panel order. \code{NULL} selects up to six CpGs
+with usable estimates, ordered by p-value.}
 
-\item{assay_name}{Character or NULL. By default, use the assay recorded by
-\code{\link[=fitCosinor]{fitCosinor()}}.}
-
-\item{time_col}{Character or NULL. By default, use the time column recorded
-by \code{\link[=fitCosinor]{fitCosinor()}}.}
-
-\item{ncol}{Integer, number of columns in facet layout (default 3).}
-
-\item{n_grid}{Integer, resolution of fitted curve grid (default 200).}
+\item{ncol}{Number of panels per row.}
 }
 \value{
-A ggplot2 object.
+A \code{ggplot2} object.
 }
 \description{
-Overlays the fitted cosinor curve on raw beta values for a set of CpGs.
+Plots observed beta values and fitted marginal mean curves over the
+observed time range, using the design saved by \code{fitCosinor()}. Curves
+describe the mean covariate profile; points are not covariate-adjusted.
 }
 \examples{
-ex <- readRDS(system.file("extdata", "example_data.rds",
-                         package = "RhyME"))
-se <- ex$se[seq_len(5), ]
-fit <- fitCosinor(se, time_col = "time", subject_col = "subject",
-                  prior = "none", verbose = FALSE)
-plotCosinorFit(fit, cpgs = rownames(fit)[1], ncol = 1)
+ex <- readRDS(system.file("extdata", "example_data.rds", package = "RhyME"))
+fit <- fitCosinor(ex$se[1, ], subject_col = "subject", prior = "none",
+    verbose = FALSE)
+plotCosinorFit(fit)
+}
+\seealso{
+\code{\link[=fitCosinor]{fitCosinor()}}
 }

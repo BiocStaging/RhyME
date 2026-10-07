@@ -1,263 +1,132 @@
-#' Fit RhyME across CpG sites
+#' Fit Cosinor Models Across CpG Sites
 #'
-#' Fits a RhyME to each CpG site in a methylation array
-#' dataset. Supports both fixed-effects (cross-sectional) and mixed-effects
-#' (repeated measures with random intercepts) designs, and optionally
-#' applies empirical Bayes shrinkage to the precision parameter (phi).
+#' Fits beta cosinor models using PQL, with optional random intercepts,
+#' adjustment covariates, and an empirical Bayes (EB) prior on log precision.
+#' A null-model score test assesses rhythmicity; a full model estimates
+#' rhythm parameters.
 #'
-#' @param se A [SummarizedExperiment::SummarizedExperiment] object. The
-#'   specified assay should contain methylation beta values in [0, 1]. Values
-#'   exactly at the boundaries are moved slightly inward for beta regression.
-#' @param time_col Character, column name in `colData(se)` containing
-#'   collection times in hours (default `"time"`).
-#' @param subject_col Character or NULL. Column name in `colData(se)` for
-#'   subject identifiers. If non-NULL, random intercepts per subject are
-#'   included (mixed-effects mode). If NULL, fixed-effects mode is used.
-#' @param covariates Character vector or NULL. Optional `colData(se)` columns
-#'   included as adjustment covariates in both the rhythmic and null models.
-#'   Covariate coefficients are treated as nuisance parameters and are not
-#'   tested or returned.
-#' @param assay_name Character or NULL, name of the assay to use. The default
-#'   NULL uses the first assay in `se`.
-#' @param period Numeric, the oscillation period in hours (default 24 for
-#'   circadian rhythms). Can be set to other values for ultradian or
-#'   infradian rhythms.
-#' @param prior Character, either `"auto"` (default) to estimate a robust
-#'   empirical-Bayes prior for log(phi), or `"none"` for ordinary maximum
-#'   likelihood.
-#' @param test Rhythmicity test: a covariance-aware joint Wald test of the sine
-#'   and cosine coefficients (`"Wald"`, default), or a likelihood-ratio test
-#'   (`"LRT"`).
-#' @param BPPARAM A [BiocParallel::BiocParallelParam] object for execution.
-#'   Defaults to [BiocParallel::MulticoreParam()] for parallel fitting on
-#'   Unix-like systems. Pass [BiocParallel::SerialParam()] for serial fitting or
-#'   [BiocParallel::SnowParam()] for socket-based parallelism.
-#' @param verbose Logical, print messages and show supported progress bars.
+#' @param se A `SummarizedExperiment` with CpGs in rows and samples in
+#' columns. The assay contains numeric beta values in \eqn{[0,1]}, with
+#' missing values allowed.
+#' @param time_col Name of the collection-time column in `colData(se)`,
+#' in hours.
+#' @param subject_col Name of the subject column for a random-intercept
+#' model, or `NULL` for a fixed-effects model of independent samples.
+#' @param assay_name Assay name, or `NULL` to use the first assay.
+#' @param period Oscillation period in hours. Default is 24.
+#' @param prior `"auto"` estimates an EB prior; `"none"` uses no prior.
+#' A named list with `mean` and positive `sd` supplies a normal prior on
+#' log precision. EB estimation requires at least 1,000 usable pilot fits.
+#' @param BPPARAM A `BiocParallelParam` object. Default is
+#' `BiocParallel::MulticoreParam()` (serial on Windows).
+#' @param verbose Whether to print fitting progress.
+#' @param covariates Names of numeric or categorical `colData(se)` columns
+#' for adjustment. Covariate coefficients are not returned.
 #'
-#' @return The input `SummarizedExperiment` with per-CpG results appended to
-#'   `rowData(se)` and design info, EB prior, test settings, and fit summary
-#'   stored in `metadata(se)$RhyME`.
+#' @return The input `SummarizedExperiment` with these `rowData(se)` columns:
+#' - `b0`, `b_sin`, `b_cos`: logit-scale intercept and sine/cosine coefficients.
+#' - `log_phi`, `tau`: log precision and random-intercept SD.
+#' - `score_chisq`, `pvalue`, `padj`: score statistic, p-value, and
+#'   BH-adjusted p-value across all input CpGs.
+#' - `logit_amplitude`, `amplitude`: logit-scale amplitude and half the
+#'   marginal mean curve's peak-to-trough difference on the methylation scale.
+#' - `phase`, `mesor`: peak time in hours in \eqn{[0,\mathrm{period})} and
+#'   the marginal mean curve averaged over one period.
+#' - `converged`: whether both null and full fits converged.
 #'
-#' @details When `covariates` are supplied, their centered design columns are
-#' included in both the full and null models. Consequently, the reported
-#' p-value still tests only the joint sine/cosine rhythmicity effect, while
-#' response-scale summaries describe the mean covariate profile.
+#' Unusable null fits have `NA` p-values; unusable full fits have `NA`
+#' parameter estimates. Usable results from either fit are retained.
+#' Phase is undefined at zero amplitude. Existing row annotations are retained.
+#' `metadata(se)$RhyME` stores `design`, `ebPrior`, and `fitSummary`.
 #'
+#' @seealso [plotCosinorFit()]
 #' @export
 #'
 #' @examples
-#' ex <- readRDS(system.file("extdata", "example_data.rds",
-#'                          package = "RhyME"))
-#' se <- ex$se[seq_len(5), ]
-#'
-#' fit <- fitCosinor(se, time_col = "time", subject_col = "subject",
-#'                   prior = "none", verbose = FALSE)
-#' head(SummarizedExperiment::rowData(fit))
-fitCosinor <- function(se,
-                       time_col = "time",
-                       subject_col = NULL,
-                       assay_name = NULL,
-                       period = 24,
+#' ex <- readRDS(system.file("extdata", "example_data.rds", package = "RhyME"))
+#' fit <- fitCosinor(ex$se[seq_len(5), ], subject_col = "subject",
+#'     prior = "none", verbose = FALSE)
+#' head(SummarizedExperiment::rowData(fit), 3)
+fitCosinor <- function(se, time_col = "time", subject_col = NULL,
+                       assay_name = NULL, period = 24,
                        prior = c("auto", "none"),
-                       test = c("Wald", "LRT"),
-                       BPPARAM = BiocParallel::MulticoreParam(),
-                       verbose = TRUE,
+                       BPPARAM = BiocParallel::MulticoreParam(), verbose = TRUE,
                        covariates = NULL) {
-
-    prior <- match.arg(prior)
-    test_method <- match.arg(test)
-    if (!is.null(subject_col) && subject_col %in% covariates) {
-        stop("'subject_col' cannot also be an adjustment covariate.",
-             call. = FALSE)
-    }
+    if (!is.null(subject_col) && subject_col %in% covariates)
+        stop("'subject_col' cannot also be an adjustment covariate.", call. = FALSE)
     if (!is.numeric(period) || length(period) != 1L ||
-        !is.finite(period) || period <= 0) {
-        stop("'period' must be a positive number.", call. = FALSE)
+        !is.finite(period) || period <= 0)
+        stop("'period' must be a positive finite number.", call. = FALSE)
+    if (is.list(prior)) {
+        .validatePQLPrior(prior)
+        prior_spec <- prior
+        prior_method <- "supplied"
+    } else {
+        prior_method <- match.arg(prior)
+        prior_spec <- NULL
     }
-
-    squeeze_bounds <- .RHYME_SQUEEZE_BOUNDS
-    # Keep the pilot pass quiet. A single progress bar is enabled immediately
-    # before the final genome-wide fit.
-    BPPARAM <- .setBPProgressBar(BPPARAM, FALSE)
-
-    # A subject column is the single switch between fixed and mixed modes.
-    mode <- if (is.null(subject_col)) "fixed" else "mixed"
-
-    input <- .getRhyMEInput(
-        se, assay_name, time_col, subject_col, covariates
-    )
-    beta_mat <- input$beta
+    input <- .getRhyMEInput(se, assay_name, time_col, subject_col, covariates)
+    beta <- input$beta
     cd <- input$col_data
-    assay_name <- input$assay_name
-    cpg_ids <- rownames(beta_mat)
-    n_cpg <- nrow(beta_mat)
-
-    # Build per-sample data frame with cosinor terms
-    cos_terms <- .makeCosinorTerms(cd[[time_col]], period = period)
-    sample_df <- data.frame(
-        sin_term = cos_terms$sin_term,
-        cos_term = cos_terms$cos_term
-    )
-    if (mode == "mixed") {
-        sample_df$subject <- cd[[subject_col]]
-    }
+    # Center once, before omitting missing beta values within each CpG.
     X_cov <- .makeCovariateMatrix(cd, covariates)
-
-    prior_spec <- NULL
-
-    if (prior == "auto") {
-        # ---- Pass 1: Pilot fit on a random subset (no prior) ----
-        n_pilot <- min(.RHYME_PILOT_N, n_cpg)
-        if (n_pilot < .RHYME_MIN_PILOT_CPGS) {
-            stop(sprintf(
-                paste0("EB prior needs at least %d pilot CpGs, but only %d ",
-                       "are available. Supply more CpGs or set ",
-                       "prior = 'none'."),
-                .RHYME_MIN_PILOT_CPGS, n_pilot
-            ), call. = FALSE)
-        }
-        pilot_idx <- if (n_pilot < n_cpg) {
-            sample(seq_len(n_cpg), n_pilot)
-        } else {
-            seq_len(n_cpg)
-        }
-
-        pilot_results <- BiocParallel::bplapply(
-            pilot_idx,
-            function(i) {
-                .fitOneCpG(
-                    cpg_id = cpg_ids[i],
-                    y = as.numeric(beta_mat[i, ]),
-                    df = sample_df,
-                    X_cov = X_cov,
-                    mode = mode,
-                    prior_phi = NULL,
-                    eps = squeeze_bounds[1],
-                    test = "none"
-                )
-            },
-            BPPARAM = BPPARAM
-        )
-
-        pilot_log_phi_subset <- vapply(pilot_results, function(r) {
-            if (isTRUE(r$converged)) r$log_phi else NA_real_
-        }, numeric(1))
-
-        prior_spec <- .estimateLogPhiPrior(pilot_log_phi_subset)
-        if (verbose) {
-            message(sprintf(
-                "RhyME prior: log(phi) mean=%.3f, sd=%.3f",
-                prior_spec$mean, prior_spec$sd
-            ))
-        }
+    X <- cbind(`(Intercept)` = rep(1, nrow(cd)), X_cov,
+        sin_term = sin(2 * pi * cd[[time_col]] / period),
+        cos_term = cos(2 * pi * cd[[time_col]] / period)
+    )
+    subject <- if (is.null(subject_col)) NULL else as.integer(factor(cd[[subject_col]])) - 1L
+    .checkPQLDesign(X, subject)
+    if (prior_method == "auto") {
+        if (nrow(beta) < 1000L)
+            stop("EB prior estimation requires at least 1,000 CpGs; use prior = 'none' for smaller datasets.",
+                 call. = FALSE)
+        pilot_index <- .pqlPilotIndex(nrow(beta))
+        if (verbose) message("Estimating EB prior on log precision from null pilot fits...")
+        pilot <- BiocParallel::bplapply(
+            .pqlBatches(beta[pilot_index, , drop = FALSE], BiocParallel::bpworkers(BPPARAM)),
+            .fitPQLPilotBatch, design = X, subject = subject, BPPARAM = BPPARAM)
+        prior_spec <- .estimateLogPhiPrior(unlist(pilot, use.names = FALSE))
     }
-
-    BPPARAM <- .setBPProgressBar(BPPARAM, verbose)
+    if (verbose) message("Fitting null score tests and full-model parameters...")
     final_results <- BiocParallel::bplapply(
-        seq_len(n_cpg),
-        function(i) {
-            .fitOneCpG(
-                cpg_id = cpg_ids[i],
-                y = as.numeric(beta_mat[i, ]),
-                df = sample_df,
-                X_cov = X_cov,
-                mode = mode,
-                prior_phi = prior_spec,
-                eps = squeeze_bounds[1],
-                test = test_method
-            )
-        },
-        BPPARAM = BPPARAM
-    )
-
+        .pqlBatches(beta, BiocParallel::bpworkers(BPPARAM)), .fitPQLBatch,
+        design = X, subject = subject, prior_phi = prior_spec, BPPARAM = BPPARAM)
+    if (verbose) message("Combining batches and computing rhythm summaries and BH-adjusted p-values...")
     se <- .assembleResults(se, final_results, period)
-
-    converged <- rowData(se)$converged %in% TRUE
+    fit_summary <- list(total = nrow(se),
+                        usable_tests = sum(!is.na(rowData(se)$pvalue)),
+                        usable_parameters = sum(!is.na(rowData(se)$b0)))
     metadata(se)$RhyME <- list(
-        design = list(
-            period = period,
-            mode = mode,
-            assay_name = assay_name,
-            time_col = time_col,
-            subject_col = subject_col,
-            covariates = if (is.null(covariates)) character() else covariates,
-            n_samples = ncol(beta_mat),
-            n_subjects = if (mode == "mixed") {
-                length(unique(cd[[subject_col]]))
-            } else {
-                NA_integer_
-            }
-        ),
-        prior = list(method = prior),
+        design = list(period = period,
+                      mode = if (is.null(subject_col)) "fixed" else "mixed",
+                      assay_name = input$assay_name,
+                      time_col = time_col, subject_col = subject_col,
+                      covariates = if (is.null(covariates)) character() else covariates,
+                      n_samples = ncol(beta),
+                      n_subjects = if (is.null(subject_col)) NA_integer_ else
+                          length(unique(subject))),
         ebPrior = prior_spec,
-        test = list(method = test_method, p.adjust.method = "BH"),
-        fitSummary = list(
-            total = n_cpg,
-            converged = sum(converged),
-            failed = n_cpg - sum(converged)
-        )
+        fitSummary = fit_summary
     )
-
-    if (verbose) .messageFitSummary(se)
+    if (verbose) message(sprintf(
+        "RhyME PQL: %d/%d usable score tests; %d/%d usable parameter fits.",
+        fit_summary$usable_tests, nrow(se), fit_summary$usable_parameters, nrow(se)))
     se
 }
 
-#' Assemble per-CpG results into the SummarizedExperiment
-#' @noRd
 .assembleResults <- function(se, results, period) {
-
-    num <- function(field) vapply(results, `[[`, numeric(1), field)
-    chr <- function(field) vapply(results, `[[`, character(1), field)
-    flag <- function(field) vapply(results, `[[`, logical(1), field)
-
-    b0 <- num("b0")
-    b_sin <- num("b_sin")
-    b_cos <- num("b_cos")
-    tau <- num("tau")
-
-    # Circadian parameters (computed from coefficients; response-scale
-    # summaries are marginal over random intercepts when tau is available).
-    circ <- .computeCircadianParams(b0, b_sin, b_cos, period, tau = tau)
-
-    pvalue <- num("pvalue")
-    res_df <- DataFrame(
-        b0 = b0,
-        b_sin = b_sin,
-        b_cos = b_cos,
-        amplitude_link = circ$amplitude_link,
-        amplitude_response = circ$amplitude_response,
-        phase = circ$phase,
-        mesor_link = circ$mesor_link,
-        mesor_response = circ$mesor_response,
-        tau = tau,
-        pvalue = pvalue,
-        padj = stats::p.adjust(pvalue, method = "BH"),
-        converged = flag("converged"),
-        row.names = chr("cpg")
-    )
-
-    rd <- rowData(se)
-    keep_cols <- setdiff(names(rd), c("RhyME", names(res_df)))
-    rowData(se) <- cbind(rd[, keep_cols, drop = FALSE], res_df)
+    res <- do.call(rbind, results)
+    circ <- .computeCircadianParams(res$b0, res$b_sin, res$b_cos,
+                                    period, tau = res$tau)
+    parameters <- c("b0", "b_sin", "b_cos", "log_phi", "tau", "score_chisq", "pvalue")
+    result <- DataFrame(res[, parameters],
+        padj = stats::p.adjust(ifelse(is.na(res$pvalue), 1, res$pvalue), method = "BH"),
+        as.data.frame(circ),
+        converged = res$converged)
+    old <- rowData(se)
+    keep <- setdiff(names(old), c("RhyME", "converged", names(res), names(result),
+        "status_null", "status_full", "error_null", "error_full",
+        "phi", "amplitude_link", "amplitude_response", "mesor_link", "mesor_response"))
+    rowData(se) <- cbind(result, old[, keep, drop = FALSE])
     se
-}
-
-#' Enable BiocParallel progress bars when supported
-#' @noRd
-.setBPProgressBar <- function(BPPARAM, progressbar) {
-    tryCatch({
-        BiocParallel::bpprogressbar(BPPARAM) <- isTRUE(progressbar)
-        BPPARAM
-    }, error = function(e) BPPARAM)
-}
-
-#' Print a compact fit summary
-#' @noRd
-.messageFitSummary <- function(se) {
-    fs <- metadata(se)$RhyME$fitSummary
-    message(sprintf(
-        "RhyME fit: %d/%d CpGs converged (%.1f%%); %d failed.",
-        fs$converged, fs$total, 100 * fs$converged / fs$total, fs$failed
-    ))
-    invisible(NULL)
 }

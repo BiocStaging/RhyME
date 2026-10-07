@@ -1,0 +1,24 @@
+Changes in version 0.99.1
+-------------------------
+
+* Fit beta cosinor models using PQL with working-Gaussian maximum likelihood.
+* Test rhythmicity with a null-model score test and estimate parameters from
+  a separate full model. Support fixed-effects and random-intercept models,
+  adjustment covariates, and an empirical Bayes prior on log precision.
+* Return 13 result columns and retain design, EB prior, and fit summaries
+  in metadata. Process CpGs in batches through BiocParallel.
+* Classify parameter boundaries using the final undamped optimizer candidate.
+* Plot marginal mean curves over the observed time range using saved fitting
+  settings. Order panels by the selected CpGs.
+* Add an evaluated workflow vignette and document the simulated example data.
+* Maintain function documentation and exports with roxygen2, as in the
+  original RhyME package.
+* Shorten function help and default to MulticoreParam() for parallel fitting.
+* Simplify plotting arguments to se, cpgs, and ncol; use a fixed curve grid.
+* Remove topCpGs(); inspect and sort results directly from rowData().
+* Assemble per-CpG results inside .fitOneCpG(), preserving partial fits.
+* Keep compact workflow tests; archive development experiments separately.
+* Document example data in the vignette and generation script.
+* Use a short RUnit workflow test under inst/unitTests, following mist.
+* Include 10,000 simulated CpGs using real-data-derived parameters and a
+  serial EB workflow in the vignette.
