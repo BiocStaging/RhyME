@@ -1,0 +1,64 @@
+Regenerating the RhyME example data
+=================================
+
+From the package source directory, run:
+
+    Rscript inst/scripts/make_example_data.R
+
+This regenerates inst/extdata/example_data.rds using only files distributed
+with the package and SummarizedExperiment. To write a separate copy:
+
+    Rscript inst/scripts/make_example_data.R /path/to/example_data.rds
+
+After installing RhyME, the script and its input are available through:
+
+    system.file("scripts", "make_example_data.R", package = "RhyME")
+    system.file("extdata", "example_parameters.rds", package = "RhyME")
+
+Pass an output path when running the installed script to save the result
+outside the installed package directory.
+
+Inputs and provenance
+---------------------
+
+example_parameters.rds contains three objects:
+
+- parameters: the 2,000 selected CpGs and their generating parameters.
+  b0, b_sin and b_cos are logit-scale coefficients; phi is beta precision;
+  tau is the subject random-intercept standard deviation. true records
+  rhythmic status, amplitude_link is the logit-scale amplitude, and
+  phase_true is peak time in hours (NA for non-rhythmic CpGs).
+- design: 112 sample names, collection times and subject identifiers for
+  the 15-subject repeated-measures design.
+- provenance: simulation settings, RNG configuration, and source checksums.
+
+The parameters originate from the authors' manuscript S2 empirical parameter
+pool: 100,000 CpG-specific beta mixed-model fits obtained with glmmTMB without
+an EB prior. Complete parameter rows were sampled jointly without replacement
+using parameter seed 42. Empirical baseline, precision, random-intercept SD
+and phase were retained. Of the 2,000 selected CpGs, 200 were randomly assigned
+as rhythmic with logit-scale amplitude 0.09; the remaining amplitudes are zero.
+
+The distributed parameter subset and sampling design are the complete inputs
+needed for this simulation. The original 100,000-CpG pool and raw methylation
+data are not required or included. Checksums of the original parameter-pool
+and sample-metadata files are retained in provenance. Regeneration starts
+from the supplied parameters; it does not refit the original methylation
+dataset.
+
+Simulation
+----------
+
+For each CpG and subject, the script draws u from N(0, tau^2), then generates:
+
+    eta = b0 + b_sin * sin(2*pi*time/24) + b_cos * cos(2*pi*time/24) + u
+    mu = plogis(eta)
+    beta ~ Beta(mu * phi, (1 - mu) * phi)
+
+Repeated-measures values are clipped to [0.0001, 0.9999]. Observation seed and
+RNG configuration are read from provenance. The independent-sample example
+uses the first 1,200 parameter rows, 48 observations at six collection times,
+no subject intercepts, and seed 123.
+
+The output contains se, se_independent and sample_meta. These are simulated
+observations; their CpG names label the source parameter rows.

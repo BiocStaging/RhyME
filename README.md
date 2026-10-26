@@ -31,12 +31,6 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
 BiocManager::install("RhyME")
 ```
 
-Install the development version from GitHub with:
-
-```r
-BiocManager::install("njuelsdke/RhyME")
-```
-
 ## Usage
 
 Input data should be a `SummarizedExperiment` with methylation beta values in an
@@ -82,11 +76,14 @@ fit_adjusted <- fitCosinor(
 ```
 
 Results, including amplitude, phase, MESOR, p-values, and convergence, are
-stored in `rowData(fit)`. View the top CpGs by sorting the table:
+stored in `rowData(fit)` with the `RhyME_` prefix, such as `RhyME_pvalue` and
+`RhyME_phase`. Existing annotations, including unprefixed columns such as
+`pvalue`, are preserved. Refitting replaces only RhyME's result columns.
+View the top CpGs by sorting the table:
 
 ```r
 result <- as.data.frame(rowData(fit))
-result <- result[order(result$pvalue, na.last = NA), , drop = FALSE]
+result <- result[order(result$RhyME_pvalue, na.last = NA), , drop = FALSE]
 head(result, 10)
 ```
 
@@ -98,8 +95,17 @@ plotCosinorFit(fit)
 
 ## Parallel Fitting
 
-By default, `fitCosinor()` uses `BiocParallel::MulticoreParam()` for parallel
-fitting on Linux and macOS. To use eight workers:
+By default, `fitCosinor()` uses `BiocParallel::bpparam()`, respecting the
+default backend registered with `BiocParallel::register()`. For example, to
+register serial fitting for subsequent calls:
+
+```r
+BiocParallel::register(BiocParallel::SerialParam())
+fit <- fitCosinor(se, time_col = "time", subject_col = "subject")
+```
+
+Pass `BPPARAM` explicitly to override the registered backend for one call.
+To use eight forked workers on Linux or macOS:
 
 ```r
 fit <- fitCosinor(

@@ -4,7 +4,9 @@
 #' observed time range, using the design saved by `fitCosinor()`. Curves
 #' describe the mean covariate profile; points are not covariate-adjusted.
 #'
-#' @param se A `SummarizedExperiment` returned by `fitCosinor()`.
+#' @param se A `SummarizedExperiment` returned by `fitCosinor()`, with
+#' `RhyME_`-prefixed result columns. Refit objects from earlier versions that
+#' have only unprefixed results.
 #' @param cpgs CpG identifiers in panel order. `NULL` selects up to six CpGs
 #' with usable estimates, ordered by p-value.
 #' @param ncol Number of panels per row.
@@ -24,17 +26,23 @@ plotCosinorFit <- function(se, cpgs = NULL, ncol = 3) {
     if (is.null(design)) {
         stop("'se' does not contain RhyME fit metadata.", call. = FALSE)
     }
+    required <- paste0("RhyME_", c("pvalue", "b0", "b_sin", "b_cos", "tau"))
+    missing <- setdiff(required, names(res))
+    if (length(missing)) {
+        stop("Missing RhyME result columns: ", paste(missing, collapse = ", "),
+             ". Refit with fitCosinor().", call. = FALSE)
+    }
     period <- design$period
 
     if (is.null(cpgs)) {
-        eligible <- which(!is.na(res$pvalue) & !is.na(res$b0))
-        eligible <- eligible[order(res$pvalue[eligible])]
+        eligible <- which(!is.na(res$RhyME_pvalue) & !is.na(res$RhyME_b0))
+        eligible <- eligible[order(res$RhyME_pvalue[eligible])]
         cpgs <- rownames(res)[utils::head(eligible, 6L)]
     }
 
     if (!length(cpgs) || anyNA(cpgs) || any(!cpgs %in% rownames(res)))
         stop("Select existing CpG names with usable parameter estimates.", call. = FALSE)
-    if (anyNA(res[cpgs, "b0", drop = TRUE]))
+    if (anyNA(res[cpgs, "RhyME_b0", drop = TRUE]))
         stop("A requested CpG has no usable full-model parameter estimates.", call. = FALSE)
     input <- .getRhyMEInput(se[cpgs, ], design$assay_name, design$time_col)
     times <- input$col_data[[design$time_col]]
@@ -60,11 +68,11 @@ plotCosinorFit <- function(se, cpgs = NULL, ncol = 3) {
         else stats::plogis(eta)
     }
     fit_list <- lapply(cpgs, function(cg) {
-        b0 <- res[cg, "b0", drop = TRUE]
-        bs <- res[cg, "b_sin", drop = TRUE]
-        bc <- res[cg, "b_cos", drop = TRUE]
+        b0 <- res[cg, "RhyME_b0", drop = TRUE]
+        bs <- res[cg, "RhyME_b_sin", drop = TRUE]
+        bc <- res[cg, "RhyME_b_cos", drop = TRUE]
         eta <- b0 + bs * sin(omega * tgrid) + bc * cos(omega * tgrid)
-        tau <- res[cg, "tau", drop = TRUE]
+        tau <- res[cg, "RhyME_tau", drop = TRUE]
         data.frame(
             cpg  = cg,
             time = tgrid,

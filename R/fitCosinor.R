@@ -17,32 +17,51 @@
 #' @param prior `"auto"` estimates an EB prior; `"none"` uses no prior.
 #' A named list with `mean` and positive `sd` supplies a normal prior on
 #' log precision. EB estimation requires at least 1,000 usable pilot fits.
-#' @param BPPARAM A `BiocParallelParam` object. Default is
-#' `BiocParallel::MulticoreParam()` (serial on Windows).
+#' @param BPPARAM A `BiocParallelParam` object. Defaults to
+#' `BiocParallel::bpparam()`, which uses the user's registered default backend.
 #' @param verbose Whether to print fitting progress.
 #' @param covariates Names of numeric or categorical `colData(se)` columns
 #' for adjustment. Covariate coefficients are not returned.
 #'
 #' @return The input `SummarizedExperiment` with these `rowData(se)` columns:
-#' - `b0`, `b_sin`, `b_cos`: logit-scale intercept and sine/cosine coefficients.
-#' - `log_phi`, `tau`: log precision and random-intercept SD.
-#' - `score_chisq`, `pvalue`, `padj`: score statistic, p-value, and
+#' - `RhyME_b0`, `RhyME_b_sin`, `RhyME_b_cos`: logit-scale intercept and
+#'   sine/cosine coefficients.
+#' - `RhyME_log_phi`, `RhyME_tau`: log precision and random-intercept SD.
+#' - `RhyME_score_chisq`, `RhyME_pvalue`, `RhyME_padj`: score statistic, p-value, and
 #'   BH-adjusted p-value across all input CpGs.
-#' - `logit_amplitude`, `amplitude`: logit-scale amplitude and half the
+#' - `RhyME_logit_amplitude`, `RhyME_amplitude`: logit-scale amplitude and half the
 #'   marginal mean curve's peak-to-trough difference on the methylation scale.
-#' - `phase`, `mesor`: peak time in hours in \eqn{[0,\mathrm{period})} and
-#'   the marginal mean curve averaged over one period.
-#' - `converged`: whether both null and full fits converged.
+#' - `RhyME_phase`, `RhyME_mesor`: peak time in hours in
+#'   \eqn{[0,\mathrm{period})} and the marginal mean curve averaged over one period.
+#' - `RhyME_converged`: whether both null and full fits converged.
 #'
 #' Unusable null fits have `NA` p-values; unusable full fits have `NA`
 #' parameter estimates. Usable results from either fit are retained.
-#' Phase is undefined at zero amplitude. Existing row annotations are retained.
+#' Phase is undefined at zero amplitude. Existing row annotations are retained;
+#' refitting replaces only the result columns listed above. Unprefixed columns
+#' from earlier versions are retained as annotations.
 #' `metadata(se)$RhyME` stores `design`, `ebPrior`, and `fitSummary`.
 #'
 #' @seealso [plotCosinorFit()]
 #' @export
 #'
 #' @examples
+#' # Independent samples: default fixed-effects model and automatic EB prior.
+#' set.seed(123)
+#' n_cpg <- 1200
+#' time <- rep(seq(0, 20, by = 4), 8)
+#' amplitude <- c(rep(0.6, 240), rep(0, 960))
+#' mu <- plogis(outer(amplitude, sin(2 * pi * time / 24)))
+#' beta <- matrix(rbeta(length(mu), mu * 40, (1 - mu) * 40),
+#'     nrow = n_cpg, dimnames = list(paste0("cg", seq_len(n_cpg)),
+#'         paste0("sample", seq_along(time))))
+#' se_independent <- SummarizedExperiment::SummarizedExperiment(
+#'     assays = list(beta = beta), colData = S4Vectors::DataFrame(time = time))
+#' fit_fixed <- fitCosinor(se_independent,
+#'     BPPARAM = BiocParallel::SerialParam(), verbose = FALSE)
+#' S4Vectors::metadata(fit_fixed)$RhyME$ebPrior
+#'
+#' # Repeated measurements: disable EB for this small subset.
 #' ex <- readRDS(system.file("extdata", "example_data.rds", package = "RhyME"))
 #' fit <- fitCosinor(ex$se[seq_len(5), ], subject_col = "subject",
 #'     prior = "none", verbose = FALSE)
@@ -50,7 +69,7 @@
 fitCosinor <- function(se, time_col = "time", subject_col = NULL,
                        assay_name = NULL, period = 24,
                        prior = c("auto", "none"),
-                       BPPARAM = BiocParallel::MulticoreParam(), verbose = TRUE,
+                       BPPARAM = BiocParallel::bpparam(), verbose = TRUE,
                        covariates = NULL) {
     if (!is.null(subject_col) && subject_col %in% covariates)
         stop("'subject_col' cannot also be an adjustment covariate.", call. = FALSE)
@@ -94,8 +113,8 @@ fitCosinor <- function(se, time_col = "time", subject_col = NULL,
     if (verbose) message("Combining batches and computing rhythm summaries and BH-adjusted p-values...")
     se <- .assembleResults(se, final_results, period)
     fit_summary <- list(total = nrow(se),
-                        usable_tests = sum(!is.na(rowData(se)$pvalue)),
-                        usable_parameters = sum(!is.na(rowData(se)$b0)))
+                        usable_tests = sum(!is.na(rowData(se)$RhyME_pvalue)),
+                        usable_parameters = sum(!is.na(rowData(se)$RhyME_b0)))
     metadata(se)$RhyME <- list(
         design = list(period = period,
                       mode = if (is.null(subject_col)) "fixed" else "mixed",
@@ -123,10 +142,9 @@ fitCosinor <- function(se, time_col = "time", subject_col = NULL,
         padj = stats::p.adjust(ifelse(is.na(res$pvalue), 1, res$pvalue), method = "BH"),
         as.data.frame(circ),
         converged = res$converged)
+    names(result) <- paste0("RhyME_", names(result))
     old <- rowData(se)
-    keep <- setdiff(names(old), c("RhyME", "converged", names(res), names(result),
-        "status_null", "status_full", "error_null", "error_full",
-        "phi", "amplitude_link", "amplitude_response", "mesor_link", "mesor_response"))
+    keep <- !names(old) %in% names(result)
     rowData(se) <- cbind(result, old[, keep, drop = FALSE])
     se
 }

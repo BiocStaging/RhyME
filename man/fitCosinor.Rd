@@ -11,7 +11,7 @@ fitCosinor(
   assay_name = NULL,
   period = 24,
   prior = c("auto", "none"),
-  BPPARAM = BiocParallel::MulticoreParam(),
+  BPPARAM = BiocParallel::bpparam(),
   verbose = TRUE,
   covariates = NULL
 )
@@ -35,8 +35,8 @@ model, or \code{NULL} for a fixed-effects model of independent samples.}
 A named list with \code{mean} and positive \code{sd} supplies a normal prior on
 log precision. EB estimation requires at least 1,000 usable pilot fits.}
 
-\item{BPPARAM}{A \code{BiocParallelParam} object. Default is
-\code{BiocParallel::MulticoreParam()} (serial on Windows).}
+\item{BPPARAM}{A \code{BiocParallelParam} object. Defaults to
+\code{BiocParallel::bpparam()}, which uses the user's registered default backend.}
 
 \item{verbose}{Whether to print fitting progress.}
 
@@ -46,20 +46,23 @@ for adjustment. Covariate coefficients are not returned.}
 \value{
 The input \code{SummarizedExperiment} with these \code{rowData(se)} columns:
 \itemize{
-\item \code{b0}, \code{b_sin}, \code{b_cos}: logit-scale intercept and sine/cosine coefficients.
-\item \code{log_phi}, \code{tau}: log precision and random-intercept SD.
-\item \code{score_chisq}, \code{pvalue}, \code{padj}: score statistic, p-value, and
+\item \code{RhyME_b0}, \code{RhyME_b_sin}, \code{RhyME_b_cos}: logit-scale intercept and
+sine/cosine coefficients.
+\item \code{RhyME_log_phi}, \code{RhyME_tau}: log precision and random-intercept SD.
+\item \code{RhyME_score_chisq}, \code{RhyME_pvalue}, \code{RhyME_padj}: score statistic, p-value, and
 BH-adjusted p-value across all input CpGs.
-\item \code{logit_amplitude}, \code{amplitude}: logit-scale amplitude and half the
+\item \code{RhyME_logit_amplitude}, \code{RhyME_amplitude}: logit-scale amplitude and half the
 marginal mean curve's peak-to-trough difference on the methylation scale.
-\item \code{phase}, \code{mesor}: peak time in hours in \eqn{[0,\mathrm{period})} and
-the marginal mean curve averaged over one period.
-\item \code{converged}: whether both null and full fits converged.
+\item \code{RhyME_phase}, \code{RhyME_mesor}: peak time in hours in
+\eqn{[0,\mathrm{period})} and the marginal mean curve averaged over one period.
+\item \code{RhyME_converged}: whether both null and full fits converged.
 }
 
 Unusable null fits have \code{NA} p-values; unusable full fits have \code{NA}
 parameter estimates. Usable results from either fit are retained.
-Phase is undefined at zero amplitude. Existing row annotations are retained.
+Phase is undefined at zero amplitude. Existing row annotations are retained;
+refitting replaces only the result columns listed above. Unprefixed columns
+from earlier versions are retained as annotations.
 \code{metadata(se)$RhyME} stores \code{design}, \code{ebPrior}, and \code{fitSummary}.
 }
 \description{
@@ -69,6 +72,22 @@ A null-model score test assesses rhythmicity; a full model estimates
 rhythm parameters.
 }
 \examples{
+# Independent samples: default fixed-effects model and automatic EB prior.
+set.seed(123)
+n_cpg <- 1200
+time <- rep(seq(0, 20, by = 4), 8)
+amplitude <- c(rep(0.6, 240), rep(0, 960))
+mu <- plogis(outer(amplitude, sin(2 * pi * time / 24)))
+beta <- matrix(rbeta(length(mu), mu * 40, (1 - mu) * 40),
+    nrow = n_cpg, dimnames = list(paste0("cg", seq_len(n_cpg)),
+        paste0("sample", seq_along(time))))
+se_independent <- SummarizedExperiment::SummarizedExperiment(
+    assays = list(beta = beta), colData = S4Vectors::DataFrame(time = time))
+fit_fixed <- fitCosinor(se_independent,
+    BPPARAM = BiocParallel::SerialParam(), verbose = FALSE)
+S4Vectors::metadata(fit_fixed)$RhyME$ebPrior
+
+# Repeated measurements: disable EB for this small subset.
 ex <- readRDS(system.file("extdata", "example_data.rds", package = "RhyME"))
 fit <- fitCosinor(ex$se[seq_len(5), ], subject_col = "subject",
     prior = "none", verbose = FALSE)

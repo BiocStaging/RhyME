@@ -7,7 +7,9 @@
 plotCosinorFit(se, cpgs = NULL, ncol = 3)
 }
 \arguments{
-\item{se}{A \code{SummarizedExperiment} returned by \code{fitCosinor()}.}
+\item{se}{A \code{SummarizedExperiment} returned by \code{fitCosinor()}, with
+\code{RhyME_}-prefixed result columns. Refit objects from earlier versions that
+have only unprefixed results.}
 
 \item{cpgs}{CpG identifiers in panel order. \code{NULL} selects up to six CpGs
 with usable estimates, ordered by p-value.}
