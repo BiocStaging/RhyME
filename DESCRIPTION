@@ -1,6 +1,6 @@
 Package: RhyME
 Title: Beta Regression Cosinor Models for Circadian Methylation Analysis
-Version: 0.99.2
+Version: 0.99.3
 Authors@R: person("Yixiang", "Hong", email = "yixiang.hong@uth.tmc.edu",
     role = c("aut", "cre"))
 Description: Fits beta cosinor models to methylation measurements

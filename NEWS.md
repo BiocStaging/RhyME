@@ -1,3 +1,7 @@
+# RhyME 0.99.3
+
+- Minor vignette updates.
+
 # RhyME 0.99.2
 
 - Respect the registered BiocParallel backend and prefix result columns with
