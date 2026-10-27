@@ -6,6 +6,8 @@
   adjustment, and phase recovery.
 - Update the vignette with rhythmic and non-rhythmic examples, evaluated
   automatic EB fits, MetaCycle comparisons, and methylation array input.
+- Add real methylation CSV data and demonstrate constructing a
+  SummarizedExperiment from beta values and sample metadata.
 - Declare MetaCycle and minfi in Suggests, and bundle the parameters and
   sampling design needed to regenerate the example data.
 - Use Bioconductor installation instructions in the README.

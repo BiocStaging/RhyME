@@ -136,10 +136,6 @@ We specify a 24-hour period to match RhyME. Here, meta2d() uses the sampling tim
 within-subject correlation, whereas RhyME includes a subject-specific random intercept.
 We compare the resulting rhythmicity calls with the known simulation truth.
 
-RhyME also uses beta regression to model the dependence of conditional variance
-on mean methylation. Its empirical Bayes prior shares information across CpGs
-to stabilize precision estimates.
-
 ```{r metacycle, results='hide'}
 Y <- data.frame(CycID = rownames(se), assay(se))
 meta_fit <- MetaCycle::meta2d(
@@ -196,7 +192,16 @@ plotCosinorFit(fit, cpgs = selected_cpgs, ncol = 2) +
 ```
 
 
-# Prepare your own data
+# Prepare real data for RhyME
+
+The study by [Ammala et al. (2025)](https://doi.org/10.1111/jsr.14438)
+provides longitudinal blood DNA methylation data through
+[OSF](https://osf.io/qx7w3/). Here we use 2,000 randomly sampled CpGs from
+the processed baseline sleep/wake data, retaining all 112 available samples
+from 15 participants. The subset is supplied as two CSV files: a beta-value
+matrix and sample metadata. Sampling times are hours since the first planned
+baseline sample, spanning 0--24 hours. Estimated phases use this same origin.
+The original time values are kept in `source_time`.
 
 Use a numeric matrix of beta values after quality control and normalization,
 with CpGs in rows and samples in columns. Sample metadata should contain
@@ -204,17 +209,23 @@ collection time in hours and, for repeated measurements, a subject identifier.
 CpG and sample names should be unique, and sample names must match between
 the matrix and metadata.
 
-For example, read two CSV files whose first columns contain row names:
+Read the bundled files and assemble a `SummarizedExperiment`. The first
+column of each file contains row names; `read.csv()` reads the compressed
+beta-value file directly.
 
-```{r own-data, eval=FALSE}
-beta <- as.matrix(read.csv("beta_values.csv", row.names = 1,
+```{r real-data}
+beta_file <- system.file("extdata", "real_beta.csv.gz", package = "RhyME")
+sample_file <- system.file("extdata", "real_samples.csv", package = "RhyME")
+beta <- as.matrix(read.csv(beta_file, row.names = 1,
     check.names = FALSE))
-sample_info <- read.csv("sample_metadata.csv", row.names = 1)
+sample_info <- read.csv(sample_file, row.names = 1)
 sample_info <- sample_info[colnames(beta), , drop = FALSE]
 
-se <- SummarizedExperiment(
+real_se <- SummarizedExperiment(
     assays = list(beta = beta),
     colData = DataFrame(sample_info))
+dim(real_se)
+head(colData(real_se))
 ```
 
 Alternatively, extract beta values from a preprocessed `minfi`
